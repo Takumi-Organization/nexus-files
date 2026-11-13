@@ -40,4 +40,21 @@ class RealServersTest {
         assertTrue(Fingerprints.same(fp, e.fingerprint))
         FtpFs("127.0.0.1", 2990, "ana", "secreto", tls = true, pinned = fp).use(::roundTrip)
     }
+
+    /** asyncssh en :2222 (ana/secreto); la huella sale de NEXUS_SFTP_FP (`ssh-keygen -lf hostkey.pub`). */
+    @Test fun `SFTP real con TOFU de clave de host`() {
+        on(); val fp = System.getenv("NEXUS_SFTP_FP") ?: return
+        val e = assertThrows(UntrustedHostException::class.java) { SftpFs("127.0.0.1", 2222, "ana", "secreto") }
+        assertEquals(fp, e.fingerprint)
+        assertThrows(UntrustedHostException::class.java) { SftpFs("127.0.0.1", 2222, "ana", "secreto", trusted = "SHA256:otra") }
+        assertThrows(RemoteException::class.java) { SftpFs("127.0.0.1", 2222, "ana", "mala", trusted = fp) }
+        SftpFs("127.0.0.1", 2222, "ana", "secreto", trusted = fp).use(::roundTrip)
+    }
+
+    /** impacket-smbserver en :4445, recurso «share», ana/secreto. */
+    @Test fun `SMB real (impacket)`() {
+        on(); if (System.getenv("NEXUS_SMB") != "1") return
+        assertThrows(RemoteException::class.java) { SmbFs("127.0.0.1", 4445, "ana", "mala", "share") }
+        SmbFs("127.0.0.1", 4445, "ana", "secreto", "share").use(::roundTrip)
+    }
 }

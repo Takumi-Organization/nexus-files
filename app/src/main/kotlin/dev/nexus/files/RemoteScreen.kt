@@ -3,6 +3,8 @@ package dev.nexus.files
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -62,7 +64,7 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
                 } }
             } else {
                 Text(s.path, color = C.dim, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                if (insecure(a)) Text("Conexión sin cifrar: usuario, contraseña y datos viajan en claro.", color = C.danger, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp))
+                if (insecure(a)) Text("Conexión sin cifrar: los datos viajan en claro (la contraseña, solo en FTP y WebDAV http).", color = C.danger, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp))
                 when {
                     s.loading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
                     s.error != null -> Column(Modifier.padding(16.dp)) { Text(s.error!!, color = C.danger); TextButton(onClick = vm::reload) { Text("Reintentar") } }
@@ -83,6 +85,18 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
         SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).padding(16.dp))
     }
 
+    s.untrusted?.let { u ->
+        val changed = s.active?.trusted?.isNotEmpty() == true
+        AlertDialog(onDismissRequest = vm::rejectTrust, title = { Text(if (changed) "¡La identidad del servidor ha cambiado!" else "Servidor desconocido") },
+            text = { Column {
+                Text(if (changed) "Podría ser un ataque o que el servidor se haya reinstalado. No continúes si no lo esperabas." else "Es la primera vez que te conectas. Comprueba que la huella coincide con la del servidor antes de aceptar.", color = if (changed) C.danger else C.text)
+                Spacer(Modifier.height(8.dp)); Text(u.kind, color = C.dim, fontSize = 12.sp)
+                Text(u.fingerprint, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.sp)
+            } },
+            confirmButton = { TextButton(onClick = vm::acceptTrust) { Text(if (changed) "Fiarme de la nueva" else "Confiar y conectar", color = if (changed) C.danger else C.accent) } },
+            dismissButton = { TextButton(onClick = vm::rejectTrust) { Text("Cancelar") } })
+    }
+
     when (val d = dlg) {
         is RDlg.Edit -> ProfileDialog(d.p, onClose = { dlg = null }, onDelete = { d.p?.let { vm.delete(it.id) }; dlg = null }) { n, pr, h, po, u, b, pw -> vm.save(d.p?.id, n, pr, h, po, u, b, pw); dlg = null }
         RDlg.NewFolder -> NameDlg("Nueva carpeta", "", "Crear", { dlg = null }) { vm.mkdir(it); dlg = null }
@@ -101,7 +115,7 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
     }
 }
 
-private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || (p.protocol == Protocol.WEBDAV && p.host.startsWith("http://", true))
+private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protocol == Protocol.SMB || (p.protocol == Protocol.WEBDAV && p.host.startsWith("http://", true))
 
 @Composable private fun TransfersPanel(jobs: List<TransferJob>) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -129,6 +143,7 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || (p.protoc
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable private fun ProfileDialog(p: RemoteProfile?, onClose: () -> Unit, onDelete: () -> Unit, onSave: (String, Protocol, String, Int, String, String, String) -> Unit) {
     var name by remember { mutableStateOf(p?.name ?: "") }
     var proto by remember { mutableStateOf(p?.protocol ?: Protocol.WEBDAV) }
@@ -138,20 +153,21 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || (p.protoc
     var user by remember { mutableStateOf(p?.user ?: "") }
     var base by remember { mutableStateOf(p?.basePath ?: "") }
     var pw by remember { mutableStateOf("") }
-    val portN = if (port.isEmpty()) (if (proto == Protocol.FTP) 21 else 0) else port.toIntOrNull()
-    val valid = name.isNotBlank() && host.isNotBlank() && portN != null && portN in 0..65535 && (p != null || pw.isNotEmpty() || user.isEmpty())
+    val portN = if (port.isEmpty()) (0) else port.toIntOrNull()
+    val valid = name.isNotBlank() && host.isNotBlank() && portN != null && portN in 0..65535 && (proto != Protocol.SMB || base.isNotBlank()) && (p != null || pw.isNotEmpty() || user.isEmpty())
     AlertDialog(onDismissRequest = onClose, title = { Text(if (p == null) "Nueva conexión" else "Editar conexión") },
         text = { Column {
-            Row { Protocol.entries.forEach { FilterChip(proto == it, { proto = it }, { Text(it.name) }, modifier = Modifier.padding(end = 8.dp)) } }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Protocol.entries.forEach { FilterChip(proto == it, { proto = it }, { Text(it.name) }) } }
             OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Nombre") })
             OutlinedTextField(host, { host = it }, singleLine = true, label = { Text("Servidor") })
             if (proto == Protocol.WEBDAV) Row(Modifier.clickable { plain = !plain }, verticalAlignment = Alignment.CenterVertically) { Checkbox(plain, { plain = it }); Text("Sin cifrar (http)", fontSize = 13.sp) }
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, singleLine = true, label = { Text("Puerto (opcional)") })
             if (proto == Protocol.WEBDAV) OutlinedTextField(base, { base = it }, singleLine = true, label = { Text("Ruta base, p. ej. /remote.php/dav") })
+            if (proto == Protocol.SMB) OutlinedTextField(base, { base = it }, singleLine = true, label = { Text("Recurso compartido") })
             OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Usuario") })
             OutlinedTextField(pw, { pw = it }, singleLine = true, visualTransformation = PasswordVisualTransformation(), label = { Text(if (p == null) "Contraseña" else "Contraseña (vacío = conservar)") })
             Text("La contraseña se guarda cifrada con Android Keystore.", color = C.dim, fontSize = 12.sp)
         } },
-        confirmButton = { TextButton(enabled = valid, onClick = { onSave(name, proto, if (proto == Protocol.WEBDAV && plain) "http://${host.trim()}" else host.trim(), portN ?: 0, user, if (proto == Protocol.WEBDAV) base else "", pw) }) { Text("Guardar") } },
+        confirmButton = { TextButton(enabled = valid, onClick = { onSave(name, proto, if (proto == Protocol.WEBDAV && plain) "http://${host.trim()}" else host.trim(), portN ?: 0, user, if (proto == Protocol.WEBDAV || proto == Protocol.SMB) base else "", pw) }) { Text("Guardar") } },
         dismissButton = { Row { if (p != null) TextButton(onClick = onDelete) { Text("Borrar", color = C.danger) }; TextButton(onClick = onClose) { Text("Cancelar") } } })
 }

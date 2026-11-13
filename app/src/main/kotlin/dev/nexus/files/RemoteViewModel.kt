@@ -22,6 +22,7 @@ data class RemoteUi(
     val loading: Boolean = false,
     val error: String? = null,
     val message: String? = null,
+    val untrusted: UntrustedHostException? = null,
 )
 
 class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
@@ -38,7 +39,10 @@ class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Contraseña vacía al editar = conservar la guardada. */
     fun save(existingId: String?, name: String, protocol: Protocol, host: String, port: Int, user: String, basePath: String, password: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val p = RemoteProfile(existingId ?: UUID.randomUUID().toString(), name.trim(), protocol, host.trim(), port, user.trim(), basePath.trim())
+            val old = _s.value.profiles.firstOrNull { it.id == existingId }
+            // la huella solo se conserva si sigue siendo el mismo servidor
+            val keep = old?.takeIf { it.protocol == protocol && it.host == host.trim() && it.port == port }?.trusted ?: ""
+            val p = RemoteProfile(existingId ?: UUID.randomUUID().toString(), name.trim(), protocol, host.trim(), port, user.trim(), basePath.trim(), keep)
             store.save(p, password.ifEmpty { null }); refreshProfiles()
         }
     }
@@ -65,7 +69,7 @@ class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
             val r = withContext(Dispatchers.IO) { runCatching { withFs(p) { it.list(path) } } }
             _s.update { s -> if (s.path != path || s.active?.id != p.id) s else r.fold(
                 { s.copy(entries = it.sortedWith(compareBy<RemoteEntry> { e -> !e.isDir }.thenBy(String.CASE_INSENSITIVE_ORDER) { e -> e.name }), loading = false) },
-                { s.copy(entries = emptyList(), loading = false, error = it.message ?: "No se pudo listar") }) }
+                { s.copy(entries = emptyList(), loading = false, untrusted = it as? UntrustedHostException, error = it.message ?: "No se pudo listar") }) }
         }
     }
 
@@ -107,6 +111,15 @@ class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
             }, { e -> _s.update { it.copy(message = "No se pudo leer el archivo: ${e.message}") } })
         }
     }
+
+    /** TOFU: el usuario vio la huella y acepta; se guarda en el perfil y se reintenta. */
+    fun acceptTrust() {
+        val u = _s.value.untrusted ?: return; val p = _s.value.active ?: return
+        val np = p.copy(trusted = u.fingerprint)
+        viewModelScope.launch(Dispatchers.IO) { store.save(np, null); refreshProfiles() }
+        _s.update { it.copy(active = np, untrusted = null, error = null) }; list(_s.value.path)
+    }
+    fun rejectTrust() = disconnect().also { _s.update { it.copy(untrusted = null) } }
 
     fun consumeMessage() = _s.update { it.copy(message = null) }
 }

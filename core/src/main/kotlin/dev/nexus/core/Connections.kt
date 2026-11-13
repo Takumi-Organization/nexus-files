@@ -4,10 +4,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-enum class Protocol { FTP, WEBDAV }
+enum class Protocol { FTP, FTPS, WEBDAV, SFTP, SMB }
 
-/** Conexión guardada. La contraseña nunca está aquí: se guarda cifrada aparte ([ProfileStore]). */
-data class RemoteProfile(val id: String, val name: String, val protocol: Protocol, val host: String, val port: Int, val user: String, val basePath: String = "")
+/** Conexión guardada. [basePath]: ruta base WebDAV o, en SMB, el nombre del recurso compartido. [trusted]: huella del certificado (FTPS/WebDAV) o de la clave de host (SFTP) aceptada por el usuario.
+ * La contraseña nunca está aquí: se guarda cifrada aparte ([ProfileStore]). */
+data class RemoteProfile(val id: String, val name: String, val protocol: Protocol, val host: String, val port: Int, val user: String, val basePath: String = "", val trusted: String = "")
 
 /** Cifra/descifra secretos. En Android lo implementa Android Keystore; en tests, un doble. */
 interface SecretBox { fun encrypt(plain: String): String; fun decrypt(token: String): String }
@@ -26,7 +27,10 @@ object RemoteFactory {
 
     fun open(p: RemoteProfile, password: String): RemoteFs = when (p.protocol) {
         Protocol.FTP -> FtpFs(p.host, p.port.takeIf { it > 0 } ?: 21, p.user, password)
-        Protocol.WEBDAV -> WebDavFs(webDavUrl(p), p.user.ifEmpty { null }, password)
+        Protocol.FTPS -> FtpFs(p.host, p.port.takeIf { it > 0 } ?: 21, p.user, password, tls = true, pinned = p.trusted)
+        Protocol.WEBDAV -> WebDavFs(webDavUrl(p), p.user.ifEmpty { null }, password, pinned = p.trusted)
+        Protocol.SFTP -> SftpFs(p.host, p.port.takeIf { it > 0 } ?: 22, p.user, password, p.trusted)
+        Protocol.SMB -> SmbFs(p.host, p.port.takeIf { it > 0 } ?: 445, p.user, password, p.basePath.trim('/').ifEmpty { throw RemoteException("Falta el nombre del recurso compartido") })
     }
 }
 
@@ -36,7 +40,7 @@ class ProfileStore(private val file: File, private val box: SecretBox) {
 
     fun list(): List<RemoteProfile> = readAll().let { a ->
         List(a.length()) { a.getJSONObject(it) }.mapNotNull { o -> runCatching {
-            RemoteProfile(o.getString("id"), o.getString("name"), Protocol.valueOf(o.getString("protocol")), o.getString("host"), o.getInt("port"), o.getString("user"), o.optString("basePath"))
+            RemoteProfile(o.getString("id"), o.getString("name"), Protocol.valueOf(o.getString("protocol")), o.getString("host"), o.getInt("port"), o.getString("user"), o.optString("basePath"), o.optString("trusted"))
         }.getOrNull() }
     }
 
@@ -50,7 +54,7 @@ class ProfileStore(private val file: File, private val box: SecretBox) {
         var keep: String? = null
         for (i in 0 until old.length()) { val o = old.getJSONObject(i); if (o.optString("id") == p.id) keep = o.optString("secret") else out.put(o) }
         out.put(JSONObject().put("id", p.id).put("name", p.name).put("protocol", p.protocol.name).put("host", p.host).put("port", p.port)
-            .put("user", p.user).put("basePath", p.basePath).put("secret", if (password != null) box.encrypt(password) else keep ?: ""))
+            .put("user", p.user).put("basePath", p.basePath).put("trusted", p.trusted).put("secret", if (password != null) box.encrypt(password) else keep ?: ""))
         write(out)
     }
 

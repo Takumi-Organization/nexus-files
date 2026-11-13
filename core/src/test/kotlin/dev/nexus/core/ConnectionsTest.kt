@@ -13,7 +13,7 @@ class ConnectionsTest {
     @Test fun `la contrasena no aparece en claro en disco y se recupera`() {
         val f = Files.createTempDirectory("pf").toFile().resolve("p.json")
         val s = ProfileStore(f, box)
-        val p = RemoteProfile("1", "NAS", Protocol.FTP, "10.0.0.2", 21, "ana")
+        val p = RemoteProfile("1", "NAS", Protocol.SFTP, "10.0.0.2", 22, "ana", trusted = "SHA256:abc")
         s.save(p, "s3cr3t!"); assertFalse(f.readText().contains("s3cr3t!"))
         assertEquals(listOf(p), s.list()); assertEquals("s3cr3t!", s.password("1"))
         s.save(p.copy(name = "NAS2"), null); assertEquals("s3cr3t!", s.password("1")); assertEquals("NAS2", s.list().single().name)

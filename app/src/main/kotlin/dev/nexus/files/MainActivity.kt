@@ -61,13 +61,14 @@ class MainActivity : ComponentActivity() {
     }.isSuccess
 }
 
-private enum class Tab(val label: String, val glyph: String) { HOME("Inicio", "⌂"), FILES("Archivos", "▤"), SEARCH("Buscar", "⌕") }
+private enum class Tab(val label: String, val glyph: String) { HOME("Inicio", "⌂"), FILES("Archivos", "▤"), SEARCH("Buscar", "⌕"), ANALYZE("Analizar", "◔") }
 
 @Composable
 private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io.File) -> Boolean) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     val explorer: ExplorerViewModel = viewModel()
     val home: HomeViewModel = viewModel()
+    val analyzer: AnalyzerViewModel = viewModel()
     val st by explorer.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { explorer.start() }
     fun openEntry(e: dev.nexus.core.Entry) {
@@ -82,6 +83,7 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
                 }
                 Tab.FILES -> ExplorerScreen(onShare, { home.addRecent(it.path); onOpenExternal(it) }, explorer, home)
                 Tab.SEARCH -> SearchScreen(home, st.dir, ::openEntry)
+                Tab.ANALYZE -> AnalyzerScreen(analyzer, home.primaryRoot, st.dir) { explorer.open(it); tab = Tab.FILES }
             }
         }
         NavigationBar { Tab.entries.forEach { t -> NavigationBarItem(tab == t, { tab = t }, { Text(t.glyph, fontSize = 20.sp) }, label = { Text(t.label) }) } }

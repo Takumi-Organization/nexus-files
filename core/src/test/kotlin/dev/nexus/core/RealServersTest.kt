@@ -32,4 +32,12 @@ class RealServersTest {
 
     @Test fun `WebDAV real (wsgidav)`() { on(); WebDavFs("http://127.0.0.1:8081", "ana", "secreto").use(::roundTrip) }
     @Test fun `FTP real (pyftpdlib)`() { on(); FtpFs("127.0.0.1", 2121, "ana", "secreto").use(::roundTrip) }
+
+    /** pyftpdlib con TLS y certificado autofirmado; la huella sale de NEXUS_FTPS_FP (openssl x509 -fingerprint -sha256). */
+    @Test fun `FTPS real exige huella y cifra datos`() {
+        on(); val fp = System.getenv("NEXUS_FTPS_FP") ?: return
+        val e = assertThrows(UntrustedHostException::class.java) { FtpFs("127.0.0.1", 2990, "ana", "secreto", tls = true) }
+        assertTrue(Fingerprints.same(fp, e.fingerprint))
+        FtpFs("127.0.0.1", 2990, "ana", "secreto", tls = true, pinned = fp).use(::roundTrip)
+    }
 }

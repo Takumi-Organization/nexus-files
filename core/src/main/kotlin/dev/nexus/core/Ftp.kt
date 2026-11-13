@@ -14,21 +14,27 @@ import java.util.Locale
 
 /**
  * Cliente FTP pasivo (RFC 959/3659: EPSV/PASV, MLSD con LIST como alternativa). FTP simple va **sin cifrar**
- * (usuario, contraseña y datos en claro); FTPS no está implementado. La conexión de datos se abre siempre contra
+ * (usuario, contraseña y datos en claro); con [tls] usa FTPS explícito (AUTH TLS) validando el certificado (o su huella [pinned]). La conexión de datos se abre siempre contra
  * el host de control, ignorando la IP que anuncie PASV (evita servidores que redirigen a terceros).
  */
-class FtpFs(private val host: String, private val port: Int = 21, private val user: String = "anonymous", password: String = "anonymous@", private val timeoutMs: Int = 15_000) : RemoteFs {
-    private val sock = Socket().apply { connect(InetSocketAddress(host, this@FtpFs.port), timeoutMs); soTimeout = timeoutMs }
-    private val ctl = sock.getInputStream().bufferedReader(Charsets.UTF_8)
-    private val out = sock.getOutputStream().bufferedWriter(Charsets.UTF_8)
+class FtpFs(private val host: String, private val port: Int = 21, private val user: String = "anonymous", password: String = "anonymous@", private val timeoutMs: Int = 15_000, private val tls: Boolean = false, private val pinned: String = "") : RemoteFs {
+    private var sock: Socket = Socket().apply { connect(InetSocketAddress(host, this@FtpFs.port), timeoutMs); soTimeout = timeoutMs }
+    private var ctl = sock.getInputStream().bufferedReader(Charsets.UTF_8)
+    private var out = sock.getOutputStream().bufferedWriter(Charsets.UTF_8)
 
     private class Reply(val code: Int, val text: String)
 
     init {
         try {
             expect(reply(), 220, "Conexión")
+            if (tls) { // FTPS explícito (RFC 4217): AUTH TLS y luego PBSZ 0 / PROT P para cifrar también los datos
+                expect(cmd("AUTH TLS"), 234, "AUTH TLS")
+                sock = Tls.wrap(sock, host, this@FtpFs.port, pinned)
+                ctl = sock.getInputStream().bufferedReader(Charsets.UTF_8); out = sock.getOutputStream().bufferedWriter(Charsets.UTF_8)
+            }
             val u = cmd("USER $user")
             if (u.code == 331) expect(cmd("PASS ${clean(password)}"), 230, "Autenticación") else expect(u, 230, "Autenticación")
+            if (tls) { ok(cmd("PBSZ 0"), "PBSZ"); ok(cmd("PROT P"), "PROT") }
             expect(cmd("TYPE I"), 200, "Modo binario")
         } catch (e: Throwable) { close(); throw e }
     }
@@ -64,7 +70,8 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
             p = n[4] * 256 + n[5]
         }
         if (p !in 1..65535) throw RemoteException("Puerto de datos inválido")
-        return Socket().apply { connect(InetSocketAddress(host, p), timeoutMs); soTimeout = timeoutMs }
+        val d = Socket().apply { connect(InetSocketAddress(host, p), timeoutMs); soTimeout = timeoutMs }
+        return if (tls) Tls.wrap(d, host, p, pinned) else d
     }
 
     private fun <T> withData(command: String, use: (Socket) -> T): T {

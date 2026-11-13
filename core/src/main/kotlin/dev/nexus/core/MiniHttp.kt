@@ -16,9 +16,9 @@ import javax.net.ssl.SSLSocketFactory
 /**
  * Cliente HTTP/1.1 mínimo sobre sockets. Existe porque `HttpURLConnection` no admite PROPFIND/MKCOL/MOVE
  * (ni en la JVM ni en Android) y así evitamos añadir OkHttp. Una petición por conexión (`Connection: close`),
- * sin redirecciones (se tratan como error), https con verificación de nombre de host.
+ * sin redirecciones (se tratan como error), https con validación del sistema y nombre de host, o fijado a una huella ([Tls]).
  */
-internal class MiniHttp(private val base: URI, private val user: String?, private val password: String?, private val timeoutMs: Int = 15_000) {
+internal class MiniHttp(private val base: URI, private val user: String?, private val password: String?, private val timeoutMs: Int = 15_000, private val pinned: String = "") {
     class Response(val status: Int, val headers: Map<String, String>, val body: InputStream, private val socket: Socket) : AutoCloseable {
         override fun close() { try { socket.close() } catch (_: IOException) {} }
         fun text(limit: Int = 16 shl 20): String {
@@ -33,12 +33,7 @@ internal class MiniHttp(private val base: URI, private val user: String?, privat
         require(https || base.scheme.equals("http", true)) { "Solo http/https" }
         val port = if (base.port > 0) base.port else if (https) 443 else 80
         val raw = Socket().apply { connect(InetSocketAddress(base.host, port), timeoutMs); soTimeout = timeoutMs }
-        val sock: Socket = if (https) {
-            ((SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(raw, base.host, port, true) as SSLSocket).apply {
-                sslParameters = SSLParameters().also { it.endpointIdentificationAlgorithm = "HTTPS" }
-                startHandshake()
-            }
-        } else raw
+        val sock: Socket = if (https) Tls.wrap(raw, base.host, port, pinned) else raw
         try {
             val out = sock.getOutputStream().buffered()
             val h = StringBuilder("$method $path HTTP/1.1\r\nHost: ${base.host}${if (base.port > 0) ":${base.port}" else ""}\r\nConnection: close\r\nUser-Agent: NexusFiles\r\n")

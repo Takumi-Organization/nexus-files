@@ -13,10 +13,10 @@ import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
 
 /** Cliente WebDAV (RFC 4918) con autenticación Basic. Usar https salvo en redes de confianza: Basic viaja en claro por http. */
-class WebDavFs(baseUrl: String, user: String? = null, password: String? = null, timeoutMs: Int = 15_000) : RemoteFs {
+class WebDavFs(baseUrl: String, user: String? = null, password: String? = null, timeoutMs: Int = 15_000, pinned: String = "") : RemoteFs {
     private val base = URI(baseUrl.trimEnd('/') + "/")
     private val basePath = base.rawPath.trimEnd('/')
-    private val http = MiniHttp(base, user, password, timeoutMs)
+    private val http = MiniHttp(base, user, password, timeoutMs, pinned)
 
     private fun enc(path: String): String =
         basePath + RemotePaths.normalize(path).split('/').filter { it.isNotEmpty() }.joinToString("") { "/" + java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }

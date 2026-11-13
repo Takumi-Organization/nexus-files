@@ -6,6 +6,8 @@ java {
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 dependencies {
     api(libs.kotlinx.coroutines.core)
+    compileOnly(libs.json)
+    testImplementation(libs.json)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.core)
 }

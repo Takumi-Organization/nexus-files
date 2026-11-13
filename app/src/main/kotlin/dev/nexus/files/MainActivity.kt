@@ -8,6 +8,14 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.nexus.core.Kind
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -23,7 +31,7 @@ class MainActivity : ComponentActivity() {
                     val o = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) granted = Environment.isExternalStorageManager() }
                     owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
                 }
-                if (granted) ExplorerScreen(onShare = ::share, onOpenExternal = ::openExternal)
+                if (granted) Root(onShare = ::share, onOpenExternal = ::openExternal)
                 else PermissionGate {
                     startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
                 }
@@ -51,4 +59,31 @@ class MainActivity : ComponentActivity() {
     private fun openExternal(f: java.io.File): Boolean = runCatching {
         startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriFor(f), mime(f)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }.isSuccess
+}
+
+private enum class Tab(val label: String, val glyph: String) { HOME("Inicio", "⌂"), FILES("Archivos", "▤"), SEARCH("Buscar", "⌕") }
+
+@Composable
+private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io.File) -> Boolean) {
+    var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
+    val explorer: ExplorerViewModel = viewModel()
+    val home: HomeViewModel = viewModel()
+    val st by explorer.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { explorer.start() }
+    fun openEntry(e: dev.nexus.core.Entry) {
+        if (e.isDir) { explorer.open(e.file); tab = Tab.FILES }
+        else { home.addRecent(e.path); onOpenExternal(e.file) }
+    }
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f)) {
+            when (tab) {
+                Tab.HOME -> HomeScreen(home, ::openEntry, { explorer.open(it); tab = Tab.FILES }) { k ->
+                    home.updateSearch({ it.copy(kind = k, name = "", ext = "", inCurrent = false) }, st.dir); tab = Tab.SEARCH
+                }
+                Tab.FILES -> ExplorerScreen(onShare, { home.addRecent(it.path); onOpenExternal(it) }, explorer, home)
+                Tab.SEARCH -> SearchScreen(home, st.dir, ::openEntry)
+            }
+        }
+        NavigationBar { Tab.entries.forEach { t -> NavigationBarItem(tab == t, { tab = t }, { Text(t.glyph, fontSize = 20.sp) }, label = { Text(t.label) }) } }
+    }
 }

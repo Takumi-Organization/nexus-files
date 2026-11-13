@@ -122,7 +122,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelOp() { opJob?.cancel() }
 
     fun mkdir(name: String) = attempt { LocalFs.mkdir(_s.value.dir!!, name) }
-    fun rename(path: String, name: String) = attempt { LocalFs.rename(File(path), name) }
+    fun rename(path: String, name: String, onMoved: (String, String) -> Unit = { _, _ -> }) = attempt { val r = LocalFs.rename(File(path), name); onMoved(path, r.path) }
 
     private fun attempt(block: () -> Unit) {
         viewModelScope.launch {

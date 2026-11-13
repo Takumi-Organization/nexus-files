@@ -39,6 +39,7 @@ private sealed interface Dlg {
     data class Rename(val e: Entry) : Dlg
     data class Delete(val paths: Set<String>, val names: List<String>) : Dlg
     data object Sort : Dlg
+    data class Tags(val paths: List<String>) : Dlg
     data class Info(val e: Entry) : Dlg
 }
 
@@ -62,8 +63,9 @@ fun PermissionGate(onGrant: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Boolean, vm: ExplorerViewModel = viewModel()) {
+fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Boolean, vm: ExplorerViewModel = viewModel(), home: HomeViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val lib by home.lib.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     val snack = remember { SnackbarHostState() }
     var dlg by remember { mutableStateOf<Dlg?>(null) }
@@ -90,7 +92,8 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
                 onShare = { onShare(selected.map { it.file }) },
                 onRename = if (selected.size == 1) ({ dlg = Dlg.Rename(selected[0]) }) else null,
                 onDelete = { dlg = Dlg.Delete(s.selection, selected.map { it.name }) },
-                onInfo = if (selected.size == 1) ({ dlg = Dlg.Info(selected[0]) }) else null)
+                onInfo = if (selected.size == 1) ({ dlg = Dlg.Info(selected[0]) }) else null,
+                onFav = { home.toggleFavorite(s.selection); vm.clearSelection() }, onTags = { dlg = Dlg.Tags(s.selection.toList()) })
         },
         floatingActionButton = { if (s.selection.isEmpty() && s.clip == null) FloatingActionButton(onClick = { dlg = Dlg.NewFolder }, containerColor = C.accent, contentColor = Color.Black) { Text("+", fontSize = 28.sp) } },
         bottomBar = { BottomPanel(s, vm) },
@@ -109,20 +112,21 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
                 s.grid -> LazyVerticalGrid(GridCells.Adaptive(104.dp), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(list, key = { it.path }) { e -> GridCell(e, e.path in s.selection, { click(e) }, { long(e) }) }
                 }
-                else -> LazyColumn { items(list, key = { it.path }) { e -> Row(e, e.path in s.selection, { click(e) }, { long(e) }) } }
+                else -> LazyColumn { items(list, key = { it.path }) { e -> EntryRow(e, e.path in s.selection, { click(e) }, { long(e) }, star = e.path in lib.favorites) } }
             }
         }
     }
 
     when (val d = dlg) {
         Dlg.NewFolder -> NameDialog("Nueva carpeta", "", "Crear", { dlg = null }) { vm.mkdir(it); dlg = null }
-        is Dlg.Rename -> NameDialog("Renombrar", d.e.name, "Renombrar", { dlg = null }) { vm.rename(d.e.path, it); dlg = null }
+        is Dlg.Rename -> NameDialog("Renombrar", d.e.name, "Renombrar", { dlg = null }) { vm.rename(d.e.path, it) { from, to -> home.moved(from, to) }; dlg = null }
         is Dlg.Delete -> AlertDialog(
             onDismissRequest = { dlg = null }, title = { Text("¿Eliminar ${d.paths.size} elemento(s)?") },
             text = { Text(d.names.take(6).joinToString("\n") + (if (d.names.size > 6) "\n… y ${d.names.size - 6} más" else "") + "\n\nEsta acción no se puede deshacer.") },
             confirmButton = { TextButton(onClick = { vm.delete(d.paths); dlg = null }) { Text("Eliminar", color = C.danger) } },
             dismissButton = { TextButton(onClick = { dlg = null }) { Text("Cancelar") } })
         Dlg.Sort -> SortDialog(s, vm) { dlg = null }
+        is Dlg.Tags -> TagsDialog(d.paths, lib, home) { dlg = null }
         is Dlg.Info -> AlertDialog(onDismissRequest = { dlg = null }, confirmButton = { TextButton(onClick = { dlg = null }) { Text("Cerrar") } },
             title = { Text(d.e.name) },
             text = { Text("Ruta: ${d.e.path}\nTipo: ${if (d.e.isDir) "Carpeta" else d.e.extension.ifEmpty { "archivo" }}\nTamaño: ${if (d.e.isDir) "—" else humanSize(d.e.size)}\nModificado: ${DateFormat.getDateTimeInstance().format(Date(d.e.modified))}") })
@@ -146,7 +150,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
     }
 }
 
-@Composable private fun SelectionBar(n: Int, onClose: () -> Unit, onAll: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onShare: () -> Unit, onRename: (() -> Unit)?, onDelete: () -> Unit, onInfo: (() -> Unit)?) {
+@Composable private fun SelectionBar(n: Int, onClose: () -> Unit, onAll: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onShare: () -> Unit, onRename: (() -> Unit)?, onDelete: () -> Unit, onInfo: (() -> Unit)?, onFav: () -> Unit, onTags: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(C.surface2).statusBarsPadding()) {
         Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onClose) { Text("✕") }
@@ -156,6 +160,8 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
         LazyRow(contentPadding = PaddingValues(horizontal = 8.dp)) {
             item { TextButton(onClick = onCopy) { Text("Copiar") } }
             item { TextButton(onClick = onCut) { Text("Cortar") } }
+            item { TextButton(onClick = onFav) { Text("★ Favorito") } }
+            item { TextButton(onClick = onTags) { Text("Etiquetas") } }
             item { TextButton(onClick = onShare) { Text("Compartir") } }
             onRename?.let { item { TextButton(onClick = it) { Text("Renombrar") } } }
             onInfo?.let { item { TextButton(onClick = it) { Text("Detalles") } } }
@@ -190,7 +196,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
 }
 
 @Composable private fun BottomPanel(s: UiState, vm: ExplorerViewModel) {
-    Column(Modifier.navigationBarsPadding()) {
+    Column {
         s.op?.let { op ->
             Column(Modifier.fillMaxWidth().background(C.surface2).padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -215,7 +221,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
     }
 }
 
-@Composable private fun Badge(e: Entry, size: Int) {
+@Composable internal fun Badge(e: Entry, size: Int) {
     val c = C.kind(e.kind)
     Box(Modifier.size(size.dp).clip(RoundedCornerShape(10.dp)).background(c.copy(alpha = 0.18f)), Alignment.Center) {
         Text(if (e.isDir) "▤" else e.extension.take(4).uppercase().ifEmpty { "·" }, color = c, fontWeight = FontWeight.Bold, fontSize = if (e.isDir) (size * 0.45f).sp else (size * 0.26f).sp, maxLines = 1)
@@ -223,7 +229,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-@Composable private fun Row(e: Entry, sel: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
+@Composable fun EntryRow(e: Entry, sel: Boolean, onClick: () -> Unit, onLong: () -> Unit, star: Boolean = false) {
     Row(Modifier.fillMaxWidth().background(if (sel) C.accent.copy(alpha = 0.16f) else Color.Transparent)
         .combinedClickable(onClick = onClick, onLongClick = onLong).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Badge(e, 44); Spacer(Modifier.width(14.dp))
@@ -231,6 +237,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
             Text(e.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (e.hidden) C.dim else C.text)
             Text(if (e.isDir) DateFormat.getDateInstance().format(Date(e.modified)) else "${humanSize(e.size)} · ${DateFormat.getDateInstance().format(Date(e.modified))}", color = C.dim, fontSize = 12.sp)
         }
+        if (star) Text("★", color = C.accent, modifier = Modifier.padding(horizontal = 6.dp))
         if (sel) Text("✓", color = C.accent, fontWeight = FontWeight.Bold)
     }
 }
@@ -277,6 +284,26 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(s.sort.descending, { vm.setSort(s.sort.copy(descending = it)) }); Text("Descendente") }
+            }
+        })
+}
+
+@Composable private fun TagsDialog(paths: List<String>, lib: LibraryData, home: HomeViewModel, onClose: () -> Unit) {
+    var v by remember { mutableStateOf("") }
+    val common = lib.allTags.filter { t -> paths.all { t in lib.tags[it].orEmpty() } }
+    AlertDialog(onDismissRequest = onClose, title = { Text("Etiquetas (${paths.size})") },
+        confirmButton = { TextButton(onClick = { if (v.isNotBlank()) home.setTags(paths, setOf(v)); onClose() }) { Text(if (v.isBlank()) "Cerrar" else "Añadir") } },
+        text = {
+            Column {
+                OutlinedTextField(v, { v = it }, singleLine = true, label = { Text("Nueva etiqueta") })
+                Spacer(Modifier.height(8.dp))
+                if (lib.allTags.isEmpty()) Text("Aún no hay etiquetas", color = C.dim)
+                lib.allTags.forEach { t ->
+                    val on = t in common
+                    Row(Modifier.fillMaxWidth().clickable { if (on) home.setTags(paths, emptySet(), setOf(t)) else home.setTags(paths, setOf(t)); onClose() }, verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(on, null); Text(t)
+                    }
+                }
             }
         })
 }

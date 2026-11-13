@@ -2,13 +2,19 @@
 
 Kotlin + Compose. `:core` (Kotlin puro, probado con JUnit: nombres, listado, copiar/mover/borrar) y `:app` (UI).
 
-## Estado (fase 1)
+## Estado (fases 1 y 2)
 Hecho y verificado: explorador (raíces interna/SD, breadcrumbs, lista/cuadrícula, orden, ocultos, selección múltiple con háptico,
 copiar/cortar/pegar, mover, renombrar, borrar con confirmación, nueva carpeta, compartir vía FileProvider, abrir con app externa,
 progreso y cancelación, skeleton). Copia atómica (`.nexus-part` + rename), sin sobrescribir salvo política explícita, sin seguir symlinks.
 
-Pendiente (fases siguientes): dashboard, analizador + treemap, duplicados por hash, búsqueda, ZIP, visores,
-favoritos/etiquetas (Room), SAF/MediaStore para ubicaciones sin "todos los archivos", transferencias en servicio en primer plano,
+Fase 2: dashboard (almacenamiento con StatFs, categorías y recientes vía MediaStore, carpetas importantes), búsqueda por
+nombre/extensión/tipo/tamaño/fecha/ubicación (avisa de carpetas ilegibles), favoritos, etiquetas y recientes (JSON atómico en filesDir,
+30 tests en :core).
+Limitaciones: las categorías dependen del índice de MediaStore; al *mover* con cortar/pegar los favoritos/etiquetas de esa ruta no se
+reasignan (se podan al arrancar); renombrar sí los conserva.
+
+Pendiente (fases siguientes): analizador + treemap, duplicados por hash, ZIP, visores,
+SAF/MediaStore para ubicaciones sin "todos los archivos", transferencias en servicio en primer plano,
 FTP/SFTP/SMB/WebDAV (cada uno con cliente real y credenciales cifradas con Keystore), ajustes.
 
 ## Probar

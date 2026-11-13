@@ -43,10 +43,13 @@ class WebDavFs(baseUrl: String, user: String? = null, password: String? = null, 
     }
 
     internal fun parse(xml: String, self: String): List<RemoteEntry> {
+        // Sin DOCTYPE no hay entidades ni XXE. Se comprueba el texto porque el parser de Android no admite
+        // la característica «disallow-doctype-decl» (lanza ParserConfigurationException); en la JVM se activa además.
+        if (xml.contains("<!DOCTYPE", ignoreCase = true) || xml.contains("<!ENTITY", ignoreCase = true)) throw RemoteException("Respuesta WebDAV rechazada (DOCTYPE)")
         val f = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) // sin XXE
-            isXIncludeAware = false; isExpandEntityReferences = false
+            try { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) } catch (_: Exception) {}
+            try { isXIncludeAware = false; isExpandEntityReferences = false } catch (_: Exception) {}
             try { setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true) } catch (_: Exception) {}
         }
         val doc = try { f.newDocumentBuilder().parse(InputSource(StringReader(xml))) } catch (e: Exception) { throw RemoteException("Respuesta WebDAV inválida", e) }

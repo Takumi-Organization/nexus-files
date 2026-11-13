@@ -26,4 +26,12 @@ class ConnectionsTest {
         f.writeText(f.readText().replace("enc:", "xxx:")); assertNull(s.password("1"))
         f.writeText("{no json"); assertTrue(s.list().isEmpty())
     }
+
+    @Test fun `url WebDAV con y sin esquema, puerto y ruta base`() {
+        fun u(h: String, port: Int = 0, b: String = "") = RemoteFactory.webDavUrl(RemoteProfile("1", "n", Protocol.WEBDAV, h, port, "u", b))
+        assertEquals("https://nas.local", u("nas.local"))
+        assertEquals("http://10.0.2.2:8081", u("http://10.0.2.2", 8081))
+        assertEquals("https://x.com:8443/remote.php/dav", u("https://x.com:8443/", 0, "/remote.php/dav"))
+        assertEquals("https://x.com/dav/files", u("x.com/dav", 0, "files"))
+    }
 }

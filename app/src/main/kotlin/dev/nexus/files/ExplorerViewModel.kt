@@ -34,6 +34,8 @@ data class UiState(
     val message: String? = null,
 )
 
+const val DEFAULT_DL = "Download/NEXUS"
+
 class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("nexus", 0)
     private val ops = FileOps()
@@ -89,6 +91,9 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     fun setGrid(v: Boolean) { prefs.edit().putBoolean("grid", v).apply(); _s.update { it.copy(grid = v) } }
     fun setHidden(v: Boolean) { prefs.edit().putBoolean("hidden", v).apply(); _s.update { it.copy(showHidden = v) } }
     fun setSort(s: Sort) { prefs.edit().putString("sortBy", s.by.name).putBoolean("desc", s.descending).apply(); _s.update { it.copy(sort = s) } }
+    val downloadFolder: String get() = prefs.getString("downloadDir", DEFAULT_DL)!!
+    fun validDownloadFolder(v: String) = v.isNotBlank() && !v.startsWith("/") && v.split('/').none { it == ".." } && '\u0000' !in v
+    fun setDownloadFolder(v: String) { if (validDownloadFolder(v)) prefs.edit().putString("downloadDir", v.trim('/')).apply() }
     fun consumeMessage() = _s.update { it.copy(message = null) }
 
     fun copyToClip(cut: Boolean) = _s.update { it.copy(clip = Clip(it.selection.toList(), cut), selection = emptySet()) }

@@ -64,7 +64,7 @@ fun PermissionGate(onGrant: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Boolean, onView: (Entry) -> Unit, vm: ExplorerViewModel = viewModel(), home: HomeViewModel = viewModel()) {
+fun ExplorerScreen(onSettings: () -> Unit, onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Boolean, onView: (Entry) -> Unit, vm: ExplorerViewModel = viewModel(), home: HomeViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val lib by home.lib.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
@@ -87,7 +87,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
         containerColor = C.bg,
         snackbarHost = { SnackbarHost(snack) },
         topBar = {
-            if (s.selection.isEmpty()) TopBar(s, vm) { dlg = Dlg.Sort }
+            if (s.selection.isEmpty()) TopBar(s, vm, onSettings) { dlg = Dlg.Sort }
             else SelectionBar(selected.size, onClose = vm::clearSelection, onAll = vm::selectAll,
                 onCopy = { vm.copyToClip(false) }, onCut = { vm.copyToClip(true) },
                 onShare = { onShare(selected.map { it.file }) },
@@ -134,7 +134,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
     }
 }
 
-@Composable private fun TopBar(s: UiState, vm: ExplorerViewModel, onSort: () -> Unit) {
+@Composable private fun TopBar(s: UiState, vm: ExplorerViewModel, onSettings: () -> Unit, onSort: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("NEXUS", fontWeight = FontWeight.Black, fontSize = 22.sp, color = C.accent, modifier = Modifier.weight(1f))
@@ -145,6 +145,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
             DropdownMenu(menu, { menu = false }) {
                 DropdownMenuItem(text = { Text(if (s.showHidden) "Ocultar archivos ocultos" else "Mostrar archivos ocultos") }, onClick = { vm.setHidden(!s.showHidden); menu = false })
                 DropdownMenuItem(text = { Text("Actualizar") }, onClick = { vm.reload(); menu = false })
+                DropdownMenuItem(text = { Text("Ajustes") }, onClick = { onSettings(); menu = false })
             }
         }
     }

@@ -13,13 +13,20 @@ data class RemoteProfile(val id: String, val name: String, val protocol: Protoco
 interface SecretBox { fun encrypt(plain: String): String; fun decrypt(token: String): String }
 
 object RemoteFactory {
-    /** WEBDAV: [host] puede llevar esquema (`https://servidor/dav`); sin esquema se asume https. */
+    /** WEBDAV: [RemoteProfile.host] puede llevar `http://` o `https://`; sin esquema se asume https. El puerto y la ruta base se añaden aquí. */
+    fun webDavUrl(p: RemoteProfile): String {
+        val plain = p.host.startsWith("http://", ignoreCase = true)
+        val hostPart = p.host.substringAfter("://").trimEnd('/')
+        val hasPort = hostPart.substringBefore('/').let { ':' in it && !it.endsWith("]") }
+        val port = if (p.port > 0 && !hasPort) ":${p.port}" else ""
+        val (h, path) = hostPart.substringBefore('/') to hostPart.substringAfter('/', "").let { if (it.isEmpty()) "" else "/$it" }
+        val base = if (p.basePath.isBlank()) "" else "/" + p.basePath.trim('/')
+        return "${if (plain) "http" else "https"}://$h$port$path$base"
+    }
+
     fun open(p: RemoteProfile, password: String): RemoteFs = when (p.protocol) {
-        Protocol.FTP -> FtpFs(p.host, p.port, p.user, password)
-        Protocol.WEBDAV -> {
-            val base = if ("://" in p.host) p.host else "https://${p.host}${if (p.port > 0) ":${p.port}" else ""}${p.basePath}"
-            WebDavFs(base, p.user.ifEmpty { null }, password)
-        }
+        Protocol.FTP -> FtpFs(p.host, p.port.takeIf { it > 0 } ?: 21, p.user, password)
+        Protocol.WEBDAV -> WebDavFs(webDavUrl(p), p.user.ifEmpty { null }, password)
     }
 }
 

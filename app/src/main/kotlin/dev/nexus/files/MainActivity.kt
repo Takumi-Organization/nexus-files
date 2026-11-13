@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
     }.isSuccess
 }
 
-private enum class Tab(val label: String, val glyph: String) { HOME("Inicio", "⌂"), FILES("Archivos", "▤"), SEARCH("Buscar", "⌕"), ANALYZE("Analizar", "◔") }
+private enum class Tab(val label: String, val glyph: String) { HOME("Inicio", "⌂"), FILES("Archivos", "▤"), SEARCH("Buscar", "⌕"), ANALYZE("Analizar", "◔"), REMOTE("Remoto", "⇄") }
 
 @Composable
 private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io.File) -> Boolean, initialView: dev.nexus.core.Entry? = null) {
@@ -79,6 +80,8 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
     val explorer: ExplorerViewModel = viewModel()
     val home: HomeViewModel = viewModel()
     val analyzer: AnalyzerViewModel = viewModel()
+    val remote: RemoteViewModel = viewModel()
+    var settings by remember { mutableStateOf(false) }
     val st by explorer.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { explorer.start() }
     var viewing by remember { mutableStateOf(initialView) }
@@ -93,13 +96,15 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
                 Tab.HOME -> HomeScreen(home, ::openEntry, { explorer.open(it); tab = Tab.FILES }) { k ->
                     home.updateSearch({ it.copy(kind = k, name = "", ext = "", inCurrent = false) }, st.dir); tab = Tab.SEARCH
                 }
-                Tab.FILES -> ExplorerScreen(onShare, { home.addRecent(it.path); onOpenExternal(it) }, ::openEntry, explorer, home)
+                Tab.FILES -> ExplorerScreen({ settings = true }, onShare, { home.addRecent(it.path); onOpenExternal(it) }, ::openEntry, explorer, home)
                 Tab.SEARCH -> SearchScreen(home, st.dir, ::openEntry)
+                Tab.REMOTE -> { BackHandler(enabled = remote.state.value.active != null) { remote.up() }; RemoteScreen(remote) }
                 Tab.ANALYZE -> AnalyzerScreen(analyzer, home.primaryRoot, st.dir) { explorer.open(it); tab = Tab.FILES }
             }
         }
         NavigationBar { Tab.entries.forEach { t -> NavigationBarItem(tab == t, { tab = t }, { Text(t.glyph, fontSize = 20.sp) }, label = { Text(t.label) }) } }
     }
+    if (settings) SettingsScreen(explorer) { settings = false }
     viewing?.let { v -> Viewers.of(v)?.let { k ->
         Box(Modifier.fillMaxSize()) {
             ViewerScreen(v, k, onClose = { viewing = null }, onExternal = { onOpenExternal(v.file) }, onExtract = { z, only -> explorer.extract(z, only); viewing = null; tab = Tab.FILES })

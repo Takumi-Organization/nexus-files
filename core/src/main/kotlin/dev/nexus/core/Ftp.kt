@@ -42,13 +42,13 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
     private fun clean(s: String): String { require('\r' !in s && '\n' !in s) { "Carácter no válido" }; return s }
 
     private fun reply(): Reply {
-        val first = ctl.readLine() ?: throw RemoteException("El servidor cerró la conexión")
+        val first = ctl.readLine() ?: throw RemoteException("El servidor cerró la conexión", java.io.EOFException())
         if (first.length < 3 || !first.substring(0, 3).all { it.isDigit() }) throw RemoteException("Respuesta FTP inválida")
         val code = first.substring(0, 3).toInt()
         val sb = StringBuilder(first)
         if (first.length > 3 && first[3] == '-') {
             while (true) {
-                val l = ctl.readLine() ?: throw RemoteException("Respuesta FTP truncada")
+                val l = ctl.readLine() ?: throw RemoteException("Respuesta FTP truncada", java.io.EOFException())
                 sb.append('\n').append(l)
                 if (l.startsWith("$code ")) break
             }

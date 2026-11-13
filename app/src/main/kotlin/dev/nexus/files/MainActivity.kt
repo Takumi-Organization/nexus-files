@@ -71,21 +71,29 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
     val analyzer: AnalyzerViewModel = viewModel()
     val st by explorer.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { explorer.start() }
+    var viewing by remember { mutableStateOf<dev.nexus.core.Entry?>(null) }
     fun openEntry(e: dev.nexus.core.Entry) {
         if (e.isDir) { explorer.open(e.file); tab = Tab.FILES }
-        else { home.addRecent(e.path); onOpenExternal(e.file) }
+        else { home.addRecent(e.path); if (Viewers.of(e) != null) viewing = e else onOpenExternal(e.file) }
     }
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
             when (tab) {
                 Tab.HOME -> HomeScreen(home, ::openEntry, { explorer.open(it); tab = Tab.FILES }) { k ->
                     home.updateSearch({ it.copy(kind = k, name = "", ext = "", inCurrent = false) }, st.dir); tab = Tab.SEARCH
                 }
-                Tab.FILES -> ExplorerScreen(onShare, { home.addRecent(it.path); onOpenExternal(it) }, explorer, home)
+                Tab.FILES -> ExplorerScreen(onShare, { home.addRecent(it.path); onOpenExternal(it) }, ::openEntry, explorer, home)
                 Tab.SEARCH -> SearchScreen(home, st.dir, ::openEntry)
                 Tab.ANALYZE -> AnalyzerScreen(analyzer, home.primaryRoot, st.dir) { explorer.open(it); tab = Tab.FILES }
             }
         }
         NavigationBar { Tab.entries.forEach { t -> NavigationBarItem(tab == t, { tab = t }, { Text(t.glyph, fontSize = 20.sp) }, label = { Text(t.label) }) } }
+    }
+    viewing?.let { v -> Viewers.of(v)?.let { k ->
+        Box(Modifier.fillMaxSize()) {
+            ViewerScreen(v, k, onClose = { viewing = null }, onExternal = { onOpenExternal(v.file) }, onExtract = { z, only -> explorer.extract(z, only); viewing = null; tab = Tab.FILES })
+        }
+    } }
     }
 }

@@ -121,6 +121,21 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelOp() { opJob?.cancel() }
 
+    fun compress(paths: Set<String>, rawName: String) {
+        val dir = _s.value.dir ?: return
+        val name = (Names.validate(rawName) as? Names.Result.Ok)?.name ?: run { _s.update { it.copy(message = "Nombre no válido") }; return }
+        val final = if (name.endsWith(".zip", true)) name else "$name.zip"
+        run("Comprimiendo", false) { cb -> Zips.create(paths.map(::File), File(dir, final), cb) }
+    }
+
+    /** Extrae a una carpeta nueva junto al ZIP (nunca mezcla con carpetas existentes). */
+    fun extract(zip: File, only: Set<String>?) {
+        val parent = zip.parentFile ?: return
+        val base = zip.nameWithoutExtension.ifEmpty { "extraido" }
+        val dest = generateSequence(0) { it + 1 }.map { File(parent, if (it == 0) base else Names.withSuffix(base, it)) }.first { !it.exists() }
+        run("Extrayendo", false) { cb -> Zips.extract(zip, dest, only, Conflict.KEEP_BOTH, cb) }
+    }
+
     fun mkdir(name: String) = attempt { LocalFs.mkdir(_s.value.dir!!, name) }
     fun rename(path: String, name: String, onMoved: (String, String) -> Unit = { _, _ -> }) = attempt { val r = LocalFs.rename(File(path), name); onMoved(path, r.path) }
 

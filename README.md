@@ -18,7 +18,9 @@ reasignan (se podan al arrancar); renombrar sí los conserva.
 
 Limitación del analizador: los temporales se identifican por nombre/extensión (cachés, .tmp, .bak…), no por análisis de contenido.
 
-Pendiente (fases siguientes): ZIP, visores,
+Fase 4 (código compilado, UI sin verificar en pantalla): ZIP (listar/extraer sin zip-slip, crear; 8 tests) y visores internos (JSON, XML, código, imagen, PDF, ZIP, audio, vídeo).
+
+Pendiente (fases siguientes):
 SAF/MediaStore para ubicaciones sin "todos los archivos", transferencias en servicio en primer plano,
 FTP/SFTP/SMB/WebDAV (cada uno con cliente real y credenciales cifradas con Keystore), ajustes.
 

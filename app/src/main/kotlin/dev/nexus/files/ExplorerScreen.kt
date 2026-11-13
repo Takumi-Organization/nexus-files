@@ -39,6 +39,7 @@ private sealed interface Dlg {
     data class Rename(val e: Entry) : Dlg
     data class Delete(val paths: Set<String>, val names: List<String>) : Dlg
     data object Sort : Dlg
+    data class Zip(val paths: Set<String>, val suggested: String) : Dlg
     data class Tags(val paths: List<String>) : Dlg
     data class Info(val e: Entry) : Dlg
 }
@@ -63,7 +64,7 @@ fun PermissionGate(onGrant: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Boolean, vm: ExplorerViewModel = viewModel(), home: HomeViewModel = viewModel()) {
+fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Boolean, onView: (Entry) -> Unit, vm: ExplorerViewModel = viewModel(), home: HomeViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val lib by home.lib.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
@@ -78,7 +79,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
 
     fun click(e: Entry) {
         if (s.selection.isNotEmpty()) { vm.toggle(e.path); return }
-        if (e.isDir) vm.open(e.file) else if (!onOpenExternal(e.file)) vm.state.value.let { vm.toggle(e.path) }
+        if (e.isDir) vm.open(e.file) else onView(e)
     }
     fun long(e: Entry) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); vm.toggle(e.path) }
 
@@ -93,7 +94,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
                 onRename = if (selected.size == 1) ({ dlg = Dlg.Rename(selected[0]) }) else null,
                 onDelete = { dlg = Dlg.Delete(s.selection, selected.map { it.name }) },
                 onInfo = if (selected.size == 1) ({ dlg = Dlg.Info(selected[0]) }) else null,
-                onFav = { home.toggleFavorite(s.selection); vm.clearSelection() }, onTags = { dlg = Dlg.Tags(s.selection.toList()) })
+                onFav = { home.toggleFavorite(s.selection); vm.clearSelection() }, onZip = { dlg = Dlg.Zip(s.selection, (selected.singleOrNull()?.name?.substringBeforeLast('.') ?: s.dir?.name ?: "archivo") + ".zip") }, onTags = { dlg = Dlg.Tags(s.selection.toList()) })
         },
         floatingActionButton = { if (s.selection.isEmpty() && s.clip == null) FloatingActionButton(onClick = { dlg = Dlg.NewFolder }, containerColor = C.accent, contentColor = Color.Black) { Text("+", fontSize = 28.sp) } },
         bottomBar = { BottomPanel(s, vm) },
@@ -126,10 +127,9 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
             confirmButton = { TextButton(onClick = { vm.delete(d.paths); dlg = null }) { Text("Eliminar", color = C.danger) } },
             dismissButton = { TextButton(onClick = { dlg = null }) { Text("Cancelar") } })
         Dlg.Sort -> SortDialog(s, vm) { dlg = null }
+        is Dlg.Zip -> NameDialog("Comprimir en ZIP", d.suggested, "Comprimir", { dlg = null }) { vm.compress(d.paths, it); dlg = null }
         is Dlg.Tags -> TagsDialog(d.paths, lib, home) { dlg = null }
-        is Dlg.Info -> AlertDialog(onDismissRequest = { dlg = null }, confirmButton = { TextButton(onClick = { dlg = null }) { Text("Cerrar") } },
-            title = { Text(d.e.name) },
-            text = { Text("Ruta: ${d.e.path}\nTipo: ${if (d.e.isDir) "Carpeta" else d.e.extension.ifEmpty { "archivo" }}\nTamaño: ${if (d.e.isDir) "—" else humanSize(d.e.size)}\nModificado: ${DateFormat.getDateTimeInstance().format(Date(d.e.modified))}") })
+        is Dlg.Info -> DetailsDialog(d.e) { dlg = null }
         null -> {}
     }
 }
@@ -150,7 +150,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
     }
 }
 
-@Composable private fun SelectionBar(n: Int, onClose: () -> Unit, onAll: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onShare: () -> Unit, onRename: (() -> Unit)?, onDelete: () -> Unit, onInfo: (() -> Unit)?, onFav: () -> Unit, onTags: () -> Unit) {
+@Composable private fun SelectionBar(n: Int, onClose: () -> Unit, onAll: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onShare: () -> Unit, onRename: (() -> Unit)?, onDelete: () -> Unit, onInfo: (() -> Unit)?, onFav: () -> Unit, onTags: () -> Unit, onZip: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(C.surface2).statusBarsPadding()) {
         Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onClose) { Text("✕") }
@@ -162,6 +162,7 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
             item { TextButton(onClick = onCut) { Text("Cortar") } }
             item { TextButton(onClick = onFav) { Text("★ Favorito") } }
             item { TextButton(onClick = onTags) { Text("Etiquetas") } }
+            item { TextButton(onClick = onZip) { Text("Comprimir") } }
             item { TextButton(onClick = onShare) { Text("Compartir") } }
             onRename?.let { item { TextButton(onClick = it) { Text("Renombrar") } } }
             onInfo?.let { item { TextButton(onClick = it) { Text("Detalles") } } }
@@ -306,4 +307,26 @@ fun ExplorerScreen(onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Bool
                 }
             }
         })
+}
+
+@Composable private fun DetailsDialog(e: Entry, onClose: () -> Unit) {
+    var extra by remember(e.path) { mutableStateOf("Calculando…") }
+    var sha by remember(e.path) { mutableStateOf<String?>(null) }
+    var wantHash by remember(e.path) { mutableStateOf(false) }
+    LaunchedEffect(e.path) {
+        extra = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            if (e.isDir) { val kids = e.file.list()?.size; "${kids ?: "?"} elementos · ${humanSize(FileOps().sizeOf(e.file))} en total" } else humanSize(e.size) + " (${e.size} bytes)"
+        }
+    }
+    LaunchedEffect(wantHash) {
+        if (wantHash) sha = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { val md = java.security.MessageDigest.getInstance("SHA-256"); e.file.inputStream().use { i -> val b = ByteArray(65536); while (true) { val n = i.read(b); if (n < 0) break; md.update(b, 0, n) } }; md.digest().joinToString("") { "%02x".format(it) } }.getOrElse { "Error: ${it.message}" }
+        }
+    }
+    val f = e.file
+    AlertDialog(onDismissRequest = onClose, confirmButton = { TextButton(onClick = onClose) { Text("Cerrar") } }, title = { Text(e.name, maxLines = 2) },
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+            Text("Ruta: ${e.path}\nTipo: ${if (e.isDir) "Carpeta" else e.extension.ifEmpty { "archivo" }}\nTamaño: $extra\nModificado: ${DateFormat.getDateTimeInstance().format(Date(e.modified))}\nPermisos: ${if (f.canRead()) "lectura" else "sin lectura"} · ${if (f.canWrite()) "escritura" else "solo lectura"}${if (e.hidden) " · oculto" else ""}")
+            if (!e.isDir) { Spacer(Modifier.height(8.dp)); if (sha == null) TextButton(onClick = { wantHash = true }, enabled = !wantHash) { Text(if (wantHash) "Calculando SHA-256…" else "Calcular SHA-256") } else Text("SHA-256:\n$sha", fontSize = 11.sp) }
+        } })
 }

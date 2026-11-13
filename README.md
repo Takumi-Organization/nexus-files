@@ -27,29 +27,48 @@ del sistema (`ZipPathValidator.clearCallback()`) y la protección la da `Zips.sa
 no se escribe fuera; comprobado en el emulador). Para probar visores sin tocar la pantalla, en builds depurables:
 `adb shell am start -n dev.nexus.files/.MainActivity --es dev.nexus.files.VIEW_PATH /sdcard/x.json`.
 
-Fase 5: clientes remotos, transferencias y ajustes.
-- **:core** detrás de `RemoteFs` (listar, descargar atómico `.nexus-part`, subir sin sobrescribir salvo petición, mkdir, borrar, renombrar sin pisar):
-  - **WebDAV** (`WebDavFs`, Basic) sobre un cliente HTTP/1.1 mínimo propio (`MiniHttp`), porque `HttpURLConnection` no admite PROPFIND/MKCOL/MOVE.
-    https con verificación de host; sin redirecciones; se rechaza cualquier XML con DOCTYPE/ENTITY (sin XXE; el parser de Android no admite
-    `disallow-doctype-decl`, bug hallado en el emulador y corregido); se ignoran entradas fuera de la carpeta pedida y nombres como `..`.
-  - **FTP** (`FtpFs`): pasivo EPSV/PASV, MLSD con LIST unix de reserva. Va sin cifrar (FTPS no implementado). Los datos se abren contra el
-    host de control, ignorando la IP que anuncie PASV.
-  - `RemoteTransfer`: descarga de ficheros y carpetas (sin pisar: «nombre (1)»), subida que renombra si existe, cancelación cooperativa sin dejar parciales.
-  - `ProfileStore` + `SecretBox`: perfiles en JSON atómico con la contraseña cifrada; `KeystoreSecretBox` (app) usa AES-256-GCM en Android Keystore.
-- **:app**: pestaña «Remoto» (alta/edición/borrado de conexiones, explorador remoto, subir con el selector del sistema, nueva carpeta, renombrar,
-  eliminar con confirmación, descargar a `Download/NEXUS`), panel de transferencias con cancelar y `TransferService` en primer plano
-  (notificación con «Cancelar»; cada transferencia abre su propia conexión). Ajustes (⋮ del explorador): ocultos, cuadrícula, orden, carpeta de descargas.
-- Sin dependencias nuevas en la app. Decisión: SFTP y SMB exigirían sshj/smbj (BouncyCastle, pesadas, problemas en Android); no se hacen.
-- **Verificado**: 68 tests JVM en :core (2 opt-in con `NEXUS_IT=1`, que pasaron contra servidores reales wsgidav y pyftpdlib en el host:
-  crear, subir, no pisar, listar con tildes, renombrar, descargar, borrar). En el emulador contra esos servidores reales por 10.0.2.2: alta de
-  conexión WebDAV y FTP desde el formulario, listado, descarga de fichero (WebDAV: SHA-256 de 30 MB idéntico), progreso, y cancelación de una
-  descarga FTP limitada a 1 MB/s (el `.nexus-part` desaparece).
-- **No verificado**: subida desde la UI (selector del sistema), renombrar/borrar/carpeta desde la UI, aspecto de la notificación en primer plano
-  (solo se comprobó que el servicio arranca sin fallo), servidores o TLS reales de Internet (solo http/ftp en loopback), `KeystoreSecretBox` fuera
-  del emulador, ajustes en pantalla.
+Fase 5: remotos, SAF, transferencias y ajustes.
+- **Protocolos** (todos detrás de `RemoteFs`: listar, descargar atómico `.nexus-part`, subir sin sobrescribir salvo petición, mkdir, borrar, renombrar sin pisar):
+  - **FTP** y **FTPS explícito** (`FtpFs`, JDK puro): pasivo EPSV/PASV, MLSD con LIST de reserva, datos siempre contra el host de control.
+  - **WebDAV** (`WebDavFs`) sobre un cliente HTTP/1.1 mínimo propio (`MiniHttp`; `HttpURLConnection` no admite PROPFIND/MKCOL/MOVE). Sin XXE (se rechaza DOCTYPE/ENTITY).
+  - **SFTP** (`SftpFs`) con JSch (fork mwiede 2.28.8) y **SMB2/3** (`SmbFs`) con smbj 0.15.0.
+  - **TLS** (`Tls`): validación del sistema + nombre de host, o huella SHA-256 fijada (autofirmados). **TOFU**: si el certificado (FTPS/WebDAV https) o la
+    clave de host SSH (SFTP, huella `SHA256:…` como `ssh-keygen -l`) no es confiable se lanza `UntrustedHostException` ANTES de enviar credenciales; la
+    app muestra la huella, y si el usuario acepta la guarda en el perfil. Si cambia después, avisa en rojo («¡La identidad del servidor ha cambiado!»).
+  - **SAF** (`SafFs`, app): carpetas elegidas con el selector de árbol y permiso persistente; modo limitado (sin «acceso a todos los archivos»)
+    desde la pantalla de permisos: solo Remoto + carpetas SAF; descargas a la carpeta propia de la app.
+  - Contraseñas: `ProfileStore` + `KeystoreSecretBox` (AES-256-GCM, Android Keystore).
+- **Dependencias nuevas y por qué** (únicas en :core; justificadas porque implementar SSH o SMB a mano no es razonable ni seguro):
+  JSch 2.28.8 (~0,5 MB, sin dependencias, cifrados modernos), smbj 0.15.0 (~0,7 MB) que arrastra bcprov-jdk18on (~8,6 MB sin reducir), asn-one, mbassador y slf4j-api.
+  APK debug resultante: 39,8 MB (sin R8; el release con minificado reduciría BouncyCastle). Probado que arrancan y funcionan en Android (emulador).
+  Limitación conocida de smbj con el servidor impacket: se lee por desplazamientos sin pasar del tamaño del fichero.
+- **Transferencias**: `Transfers` + `TransferService` en primer plano (notificación con «Cancelar»; permiso POST_NOTIFICATIONS pedido una vez) para
+  descargas/subidas remotas Y para copiar, mover, borrar y ZIP locales. **Reintentos** (`RetryingFs`): reconecta y repite la operación ante fallos de red
+  pasajeros, 4 intentos con espera 2-4-8 s (tope 30 s), cancelable; autenticación, permisos, «ya existe» y huellas no confiadas nunca se reintentan.
+  Las descargas interrumpidas se repiten desde el principio (sin reanudar).
+- **Ajustes** (⋮ del explorador): ocultos, cuadrícula, orden, carpetas primero, carpeta de descargas.
+- **Verificado**
+  - JVM: 80+ tests en :core. Opt-in (`NEXUS_IT=1`, `NEXUS_FTPS_FP`, `NEXUS_SFTP_FP`, `NEXUS_SMB=1`) contra servidores REALES en el host: wsgidav (WebDAV),
+    pyftpdlib (FTP y FTPS con certificado autofirmado), asyncssh (SFTP con TOFU) e impacket (SMB): crear, subir, no pisar, listar con tildes, renombrar,
+    descargar, borrar. TLS/TOFU probado sin servidor externo con un certificado de `keytool`.
+  - Emulador (emulator-5554, por 10.0.2.2, contra esos servidores reales): alta de conexiones FTP, FTPS, SFTP, SMB y WebDAV desde el formulario;
+    diálogo de huella (coincide con `openssl`/`ssh-keygen`); listar y descargar en todos; descarga de 30 MB por WebDAV con SHA-256 idéntico; cancelar una
+    descarga FTP limitada a 1 MB/s (el `.nexus-part` desaparece); **reintento real**: se mató el servidor FTP a mitad, la pantalla mostró «Reintentando (4/4)…»,
+    se reinició y la descarga de 12 MB terminó con SHA-256 idéntico; subir desde el selector del sistema (SFTP, el fichero llegó al servidor); crear carpeta,
+    renombrar y eliminar (recursivo) por SFTP; notificación del servicio en primer plano (captura del panel con «Descargar grande.bin · 4,1 MB»); pantalla
+    de Ajustes; SAF completo (selector de árbol, concesión, listado, descarga) en modo limitado.
+  - Visores (JSON, XML, código, PNG, PDF, mp3, mp4) y ZIP (con entrada `../`) en el emulador; ver Fase 4.
+- **No verificado**
+  - Copiar/mover/borrar/ZIP locales ejecutándose dentro del servicio (comparten el código de `Transfers.start`, comprobado con transferencias remotas, pero no se
+    pulsó «pegar» en pantalla).
+  - Servidores o certificados reales de Internet (solo loopback). FTPS contra servidores que exigen reutilizar la sesión TLS en la conexión de datos
+    (p. ej. vsftpd por defecto) puede fallar: el JDK no la reutiliza entre puertos; pyftpdlib no lo exige.
+  - SFTP con claves privadas (solo contraseña), claves de host solo Ed25519 probadas con asyncssh, SMB con dominio/firmado/cifrado SMB3 obligatorio.
+  - SAF: subir, renombrar, borrar y crear carpeta (código escrito, no ejecutado); mover entre carpetas distintas (no soportado).
+  - `KeystoreSecretBox` fuera del emulador, tamaño del APK release.
+  - El diálogo de permiso de notificaciones (en las pruebas se concedió con `pm grant`).
 
-Pendiente: SFTP, SMB, FTPS; SAF/MediaStore para ubicaciones sin «todos los archivos»; copiar/mover locales en el servicio en primer plano
-(hoy solo las transferencias remotas lo usan); reintento automático.
+Pendiente solo lo imposible o fuera de alcance: autenticación SFTP por clave privada, reanudar descargas, dominios SMB, y probar contra hardware/servidores reales.
 
 ## Probar
 `./gradlew :core:test` · `./gradlew :app:assembleDebug` · permiso: `adb shell appops set dev.nexus.files MANAGE_EXTERNAL_STORAGE allow`

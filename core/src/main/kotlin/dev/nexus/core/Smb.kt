@@ -77,7 +77,7 @@ class SmbFs(host: String, port: Int = 445, user: String, password: String, priva
                     out.write(buf, 0, n); off += n; onProgress(off)
                 }
             }
-            if (off != size) { dest.delete(); throw RemoteException("Descarga incompleta") }
+            if (off != size) { dest.delete(); throw RemoteException("Descarga incompleta", java.io.EOFException()) }
         }
     }
 

@@ -85,7 +85,7 @@ class WebDavFs(baseUrl: String, user: String? = null, password: String? = null, 
                 val buf = ByteArray(32 * 1024)
                 while (true) { val n = r.body.read(buf); if (n < 0) break; out.write(buf, 0, n); total += n; onProgress(total) }
             }
-            if (expected != null && expected != total) { dest.delete(); throw RemoteException("Descarga incompleta") }
+            if (expected != null && expected != total) { dest.delete(); throw RemoteException("Descarga incompleta", java.io.EOFException()) }
         }
     }
 

@@ -28,6 +28,13 @@ class MainActivity : ComponentActivity() {
         // Android 14+ hace que ZipFile lance excepción ante entradas con ".." y no deja ni listar el ZIP. Los quitamos del
         // validador del sistema porque Zips.safeTarget ya descarta cada ruta insegura al extraer (cubierto por tests).
         if (android.os.Build.VERSION.SDK_INT >= 34) dalvik.system.ZipPathValidator.clearCallback()
+        // Android 13+: sin este permiso el servicio en primer plano corre pero su notificación (con «Cancelar») no se ve. Se pide una sola vez.
+        val prefs = getSharedPreferences("nexus", 0)
+        if (android.os.Build.VERSION.SDK_INT >= 33 && !prefs.getBoolean("askedNotif", false) &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            prefs.edit().putBoolean("askedNotif", true).apply()
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
         setContent {
             NexusTheme {
                 var granted by remember { mutableStateOf(Environment.isExternalStorageManager()) }

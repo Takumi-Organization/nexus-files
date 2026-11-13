@@ -127,7 +127,7 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
                 val buf = ByteArray(32 * 1024); val i = d.getInputStream()
                 while (true) { val n = i.read(buf); if (n < 0) break; o.write(buf, 0, n); total += n; onProgress(total) }
             }
-            if (size != null && size != total) { dest.delete(); throw RemoteException("Descarga incompleta") }
+            if (size != null && size != total) { dest.delete(); throw RemoteException("Descarga incompleta", java.io.EOFException()) }
         }
     }
 

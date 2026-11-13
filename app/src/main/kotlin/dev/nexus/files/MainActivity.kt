@@ -23,6 +23,9 @@ import androidx.lifecycle.LifecycleEventObserver
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Android 14+ hace que ZipFile lance excepción ante entradas con ".." y no deja ni listar el ZIP. Los quitamos del
+        // validador del sistema porque Zips.safeTarget ya descarta cada ruta insegura al extraer (cubierto por tests).
+        if (android.os.Build.VERSION.SDK_INT >= 34) dalvik.system.ZipPathValidator.clearCallback()
         setContent {
             NexusTheme {
                 var granted by remember { mutableStateOf(Environment.isExternalStorageManager()) }
@@ -31,12 +34,19 @@ class MainActivity : ComponentActivity() {
                     val o = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) granted = Environment.isExternalStorageManager() }
                     owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
                 }
-                if (granted) Root(onShare = ::share, onOpenExternal = ::openExternal)
+                if (granted) Root(onShare = ::share, onOpenExternal = ::openExternal, initialView = debugViewTarget())
                 else PermissionGate {
                     startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
                 }
             }
         }
+    }
+
+    /** Solo en builds depurables: `--es dev.nexus.files.VIEW_PATH /ruta` abre el visor directamente (para pruebas sin tocar la pantalla). */
+    private fun debugViewTarget(): dev.nexus.core.Entry? {
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
+        val p = intent?.getStringExtra("dev.nexus.files.VIEW_PATH") ?: return null
+        return java.io.File(p).takeIf { it.isFile }?.let(dev.nexus.core.LocalFs::entry)
     }
 
     private fun uriFor(f: java.io.File) = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", f)
@@ -64,14 +74,14 @@ class MainActivity : ComponentActivity() {
 private enum class Tab(val label: String, val glyph: String) { HOME("Inicio", "⌂"), FILES("Archivos", "▤"), SEARCH("Buscar", "⌕"), ANALYZE("Analizar", "◔") }
 
 @Composable
-private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io.File) -> Boolean) {
+private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io.File) -> Boolean, initialView: dev.nexus.core.Entry? = null) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     val explorer: ExplorerViewModel = viewModel()
     val home: HomeViewModel = viewModel()
     val analyzer: AnalyzerViewModel = viewModel()
     val st by explorer.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { explorer.start() }
-    var viewing by remember { mutableStateOf<dev.nexus.core.Entry?>(null) }
+    var viewing by remember { mutableStateOf(initialView) }
     fun openEntry(e: dev.nexus.core.Entry) {
         if (e.isDir) { explorer.open(e.file); tab = Tab.FILES }
         else { home.addRecent(e.path); if (Viewers.of(e) != null) viewing = e else onOpenExternal(e.file) }

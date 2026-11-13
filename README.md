@@ -20,9 +20,22 @@ Limitación del analizador: los temporales se identifican por nombre/extensión 
 
 Fase 4 (código compilado, UI sin verificar en pantalla): ZIP (listar/extraer sin zip-slip, crear; 8 tests) y visores internos (JSON, XML, código, imagen, PDF, ZIP, audio, vídeo).
 
-Pendiente (fases siguientes):
-SAF/MediaStore para ubicaciones sin "todos los archivos", transferencias en servicio en primer plano,
-FTP/SFTP/SMB/WebDAV (cada uno con cliente real y credenciales cifradas con Keystore), ajustes.
+Fase 5 (solo :core, sin UI): clientes remotos detrás de `RemoteFs` (listar, descargar atómico `.nexus-part`, subir sin sobrescribir
+salvo petición, mkdir, borrar, renombrar sin pisar).
+- **WebDAV** (`WebDavFs`, Basic): PROPFIND/GET/PUT/MKCOL/DELETE/MOVE sobre un cliente HTTP/1.1 mínimo propio (`MiniHttp`), porque
+  `HttpURLConnection` no admite PROPFIND/MKCOL/MOVE. https con verificación de host; sin redirecciones; XML sin DOCTYPE (sin XXE);
+  se ignoran entradas fuera de la carpeta pedida y nombres como `..`.
+- **FTP** (`FtpFs`): pasivo EPSV/PASV, MLSD con LIST unix de reserva. Va sin cifrar (FTPS no implementado). Los datos se abren contra el
+  host de control, ignorando la IP que anuncie PASV.
+- `ProfileStore` + `SecretBox`: perfiles en JSON atómico con la contraseña cifrada; `KeystoreSecretBox` (app) usa AES-256-GCM en Android Keystore.
+- Sin dependencias nuevas (decisión: SFTP y SMB exigirían sshj/smbj con BouncyCastle, pesadas y con problemas de compatibilidad en Android;
+  se dejan para cuando haya UI y se pueda probar en dispositivo).
+- Verificado: 61 tests JVM en :core (11 nuevos de red contra WebDAV y FTP falsos en memoria por loopback, + perfiles); `:app:compileDebugKotlin` compila.
+- **No verificado**: nada de red real (servidores reales, TLS/certificados reales, FTP tras NAT, servidores que respondan distinto a los dobles),
+  `KeystoreSecretBox` (no se ejecutó en Android), ni UI de ZIP/visores/remotos en pantalla.
+
+Pendiente: pantalla de conexiones y explorador remoto en :app (usar `RemoteFactory`, siempre fuera del hilo principal), transferencias
+en servicio en primer plano, SFTP y SMB, FTPS, SAF/MediaStore para ubicaciones sin "todos los archivos", ajustes.
 
 ## Probar
 `./gradlew :core:test` · `./gradlew :app:assembleDebug` · permiso: `adb shell appops set dev.nexus.files MANAGE_EXTERNAL_STORAGE allow`

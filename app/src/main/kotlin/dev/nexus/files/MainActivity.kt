@@ -13,6 +13,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -36,8 +37,12 @@ class MainActivity : ComponentActivity() {
                     owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
                 }
                 if (granted) Root(onShare = ::share, onOpenExternal = ::openExternal, initialView = debugViewTarget())
-                else PermissionGate {
-                    startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+                var limited by rememberSaveable { mutableStateOf(false) }
+                if (!granted) {
+                    if (limited) LimitedRoot(onBack = { limited = false })
+                    else PermissionGate({ limited = true }) {
+                        startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+                    }
                 }
             }
         }
@@ -110,5 +115,17 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
             ViewerScreen(v, k, onClose = { viewing = null }, onExternal = { onOpenExternal(v.file) }, onExtract = { z, only -> explorer.extract(z, only); viewing = null; tab = Tab.FILES })
         }
     } }
+    }
+}
+
+/** Sin «acceso a todos los archivos»: solo carpetas concedidas por SAF y servidores remotos. */
+@Composable
+private fun LimitedRoot(onBack: () -> Unit) {
+    val remote: RemoteViewModel = viewModel()
+    BackHandler { if (!remote.up()) onBack() }
+    Column(Modifier.fillMaxSize()) {
+        Text("Modo limitado: solo las carpetas que has elegido. Para explorar todo el almacenamiento concede «Acceso a todos los archivos».", fontSize = 12.sp,
+            color = C.dim, modifier = Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 6.dp))
+        Box(Modifier.weight(1f)) { RemoteScreen(remote) }
     }
 }

@@ -34,7 +34,7 @@ object Transfers {
 
     private fun update(id: Int, f: (TransferJob) -> TransferJob) = _jobs.update { l -> l.map { if (it.id == id) f(it) else it } }
 
-    private fun start(ctx: Context, title: String, run: suspend (id: Int, cancelled: () -> Boolean, progress: (Long, String) -> Unit) -> TransferResult) {
+    private fun start(ctx: Context, title: String, run: suspend (id: Int, cancelled: () -> Boolean, progress: (Long, String) -> Unit) -> TransferResult): Job {
         val app = ctx.applicationContext
         val id = ids.getAndIncrement()
         _jobs.update { (it + TransferJob(id, title)).takeLast(30) }
@@ -52,21 +52,38 @@ object Transfers {
             synchronized(handles) { handles.remove(id) }
         }
         synchronized(handles) { handles[id] = job }
+        return job
     }
 
-    private fun open(ctx: Context, profile: RemoteProfile): RemoteFs {
+    /** Conexión con reconexión y reintentos (hasta 4 intentos, espera 2-4-8 s); el estado del reintento se ve en la lista. */
+    private fun open(ctx: Context, profile: RemoteProfile, id: Int, cancelled: () -> Boolean): RemoteFs {
         val store = ProfileStore(File(ctx.filesDir, "remotes.json"), KeystoreSecretBox())
-        val pw = store.password(profile.id) ?: throw RemoteException("No se pudo recuperar la contraseña guardada: edita la conexión y vuelve a escribirla")
-        return RemoteFactory.open(profile, pw)
+        val pw = AppRemote.password(store, profile)
+        return RetryingFs({ AppRemote.open(ctx, profile, pw) }, RetryPolicy(4, 2_000, 30_000), cancelled,
+            onRetry = { n, d, e -> update(id) { j -> j.copy(current = "Reintentando ($n/4) en ${d / 1000} s: ${e.message ?: e.javaClass.simpleName}") } })
     }
 
     fun download(ctx: Context, profile: RemoteProfile, e: RemoteEntry, destDir: File) =
-        start(ctx, "Descargar ${e.name}") { _, cancelled, progress -> open(ctx, profile).use { RemoteTransfer.download(it, e, destDir, cancelled, progress) } }
+        start(ctx, "Descargar ${e.name}") { id, cancelled, progress -> open(ctx, profile, id, cancelled).use { RemoteTransfer.download(it, e, destDir, cancelled, progress) } }
 
     fun upload(ctx: Context, profile: RemoteProfile, src: File, remoteDir: String, deleteAfter: Boolean = false) =
-        start(ctx, "Subir ${src.name}") { _, cancelled, progress ->
-            try { open(ctx, profile).use { RemoteTransfer.upload(it, src, remoteDir, cancelled, progress) } } finally { if (deleteAfter) src.delete() }
+        start(ctx, "Subir ${src.name}") { id, cancelled, progress ->
+            try { open(ctx, profile, id, cancelled).use { RemoteTransfer.upload(it, src, remoteDir, cancelled, progress) } } finally { if (deleteAfter) src.delete() }
         }
+
+    /**
+     * Operación local larga (copiar, mover, borrar, ZIP) dentro del servicio en primer plano: sigue con la app en segundo plano
+     * y se cancela desde la notificación. [onProgress]/[onDone] devuelven el resultado al llamador.
+     */
+    fun local(ctx: Context, title: String, block: suspend ((Progress) -> Unit) -> Report, onProgress: (Progress) -> Unit, onDone: (Report) -> Unit): Job {
+        var report = Report()
+        val job = start(ctx, title) { id, _, progress ->
+            report = try { block { p -> onProgress(p); progress(p.doneBytes, p.current) } } catch (c: CancellationException) { Report(cancelled = true) }
+            TransferResult(report.done, 0, report.failed.map { "${it.path}: ${it.reason}" }, report.cancelled)
+        }
+        job.invokeOnCompletion { t -> onDone(if (t is CancellationException && report == Report()) Report(cancelled = true) else report) }
+        return job
+    }
 
     fun cancel(id: Int) { synchronized(handles) { handles[id] }?.cancel() }
     fun cancelAll() { synchronized(handles) { handles.values.toList() }.forEach { it.cancel() } }

@@ -52,13 +52,16 @@ fun humanSize(b: Long): String {
 }
 
 @Composable
-fun PermissionGate(onGrant: () -> Unit) {
+fun PermissionGate(onLimited: () -> Unit, onGrant: () -> Unit) {
     Column(Modifier.fillMaxSize().background(C.bg).padding(32.dp), verticalArrangement = Arrangement.Center) {
         Text("NEXUS", fontSize = 40.sp, fontWeight = FontWeight.Black, color = C.accent)
         Spacer(Modifier.height(12.dp))
         Text("Para gestionar tus archivos, Android necesita que concedas «Acceso a todos los archivos». Es una concesión explícita tuya en Ajustes; NEXUS no la usa para nada más que explorar y operar sobre archivos cuando tú lo pides.", color = C.dim)
         Spacer(Modifier.height(24.dp))
         Button(onClick = onGrant) { Text("Abrir Ajustes") }
+        Spacer(Modifier.height(12.dp))
+        Text("O, si prefieres no dar acceso total, usa solo las carpetas que elijas tú (selector del sistema) y los servidores remotos. Podrás conceder el acceso total más tarde.", color = C.dim, fontSize = 13.sp)
+        TextButton(onClick = onLimited) { Text("Usar solo carpetas elegidas") }
     }
 }
 

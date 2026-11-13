@@ -112,8 +112,7 @@ class ExplorerViewModel(app: Application) : AndroidViewModel(app) {
     private fun run(title: String, clearClipOnOk: Boolean, block: suspend (cb: (Progress) -> Unit) -> Report) {
         if (opJob?.isActive == true) { _s.update { it.copy(message = "Ya hay una operación en curso") }; return }
         _s.update { it.copy(op = OpState(title, null), selection = emptySet()) }
-        opJob = viewModelScope.launch(Dispatchers.IO) {
-            val r = block { p -> _s.update { it.copy(op = OpState(title, p)) } }
+        opJob = Transfers.local(getApplication(), title, block, { p -> _s.update { it.copy(op = OpState(title, p)) } }) { r ->
             val msg = buildString {
                 append(if (r.cancelled) "Cancelado" else "Listo"); append(": ${r.done} elemento(s)")
                 if (r.skipped.isNotEmpty()) append(", ${r.skipped.size} omitido(s)")

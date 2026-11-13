@@ -47,12 +47,24 @@ class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun delete(id: String) { viewModelScope.launch(Dispatchers.IO) { store.delete(id); refreshProfiles() } }
+    /** Carpeta elegida con el selector del sistema: se guarda el permiso persistente y un perfil sin contraseña. */
+    fun addSaf(uri: android.net.Uri) {
+        runCatching { app.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+            .onFailure { _s.update { s -> s.copy(message = "No se pudo conservar el permiso: ${it.message}") }; return }
+        val name = android.provider.DocumentsContract.getTreeDocumentId(uri).substringAfterLast(':').substringAfterLast('/').ifEmpty { "Carpeta" }
+        viewModelScope.launch(Dispatchers.IO) { store.save(RemoteProfile(UUID.randomUUID().toString(), name, Protocol.SAF, uri.toString(), 0, ""), null); refreshProfiles() }
+    }
+
+    fun delete(id: String) {
+        _s.value.profiles.firstOrNull { it.id == id && it.protocol == Protocol.SAF }?.let { p ->
+            runCatching { app.contentResolver.releasePersistableUriPermission(android.net.Uri.parse(p.host), android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+        }
+        viewModelScope.launch(Dispatchers.IO) { store.delete(id); refreshProfiles() }
+    }
 
     /** Abre una conexión nueva por operación: si una sesión FTP queda a medias tras un error, no contamina la siguiente. */
     private fun <T> withFs(p: RemoteProfile, block: (RemoteFs) -> T): T {
-        val pw = store.password(p.id) ?: throw RemoteException("No se pudo recuperar la contraseña: edita la conexión y vuelve a escribirla")
-        return RemoteFactory.open(p, pw).use(block)
+        return AppRemote.open(app, p, AppRemote.password(store, p)).use(block)
     }
 
     fun connect(p: RemoteProfile) { _s.update { it.copy(active = p, path = "/", entries = emptyList(), error = null) }; list("/") }
@@ -88,7 +100,9 @@ class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun downloadDir(): File = File(android.os.Environment.getExternalStorageDirectory(), prefs.getString("downloadDir", DEFAULT_DL)!!)
+    /** Con acceso total, la carpeta configurada; sin él, la carpeta propia de la app (única escribible con File en Android 11+). */
+    fun downloadDir(): File = if (android.os.Environment.isExternalStorageManager()) File(android.os.Environment.getExternalStorageDirectory(), prefs.getString("downloadDir", DEFAULT_DL)!!)
+        else File(app.getExternalFilesDir(null) ?: app.filesDir, "Descargas")
 
     fun download(e: RemoteEntry) { _s.value.active?.let { Transfers.download(app, it, e, downloadDir()) } }
 

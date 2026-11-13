@@ -4,7 +4,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-enum class Protocol { FTP, FTPS, WEBDAV, SFTP, SMB }
+/** SAF: carpeta elegida con el selector del sistema (solo Android; [RemoteProfile.host] guarda el URI del árbol). */
+enum class Protocol { FTP, FTPS, WEBDAV, SFTP, SMB, SAF }
 
 /** Conexión guardada. [basePath]: ruta base WebDAV o, en SMB, el nombre del recurso compartido. [trusted]: huella del certificado (FTPS/WebDAV) o de la clave de host (SFTP) aceptada por el usuario.
  * La contraseña nunca está aquí: se guarda cifrada aparte ([ProfileStore]). */
@@ -30,6 +31,7 @@ object RemoteFactory {
         Protocol.FTPS -> FtpFs(p.host, p.port.takeIf { it > 0 } ?: 21, p.user, password, tls = true, pinned = p.trusted)
         Protocol.WEBDAV -> WebDavFs(webDavUrl(p), p.user.ifEmpty { null }, password, pinned = p.trusted)
         Protocol.SFTP -> SftpFs(p.host, p.port.takeIf { it > 0 } ?: 22, p.user, password, p.trusted)
+        Protocol.SAF -> throw RemoteException("Las carpetas del sistema solo se abren desde la app")
         Protocol.SMB -> SmbFs(p.host, p.port.takeIf { it > 0 } ?: 445, p.user, password, p.basePath.trim('/').ifEmpty { throw RemoteException("Falta el nombre del recurso compartido") })
     }
 }

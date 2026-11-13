@@ -23,6 +23,7 @@ import dev.nexus.core.*
 
 private sealed interface RDlg {
     data class Edit(val p: RemoteProfile?) : RDlg
+    data class Remove(val p: RemoteProfile) : RDlg
     data object NewFolder : RDlg
     data class Rename(val e: RemoteEntry) : RDlg
     data class Delete(val e: RemoteEntry) : RDlg
@@ -35,6 +36,7 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
     val jobs by Transfers.jobs.collectAsStateWithLifecycle()
     var dlg by remember { mutableStateOf<RDlg?>(null) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) vm.upload(uri) }
+    val tree = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> if (uri != null) vm.addSaf(uri) }
     val snack = remember { SnackbarHostState() }
     LaunchedEffect(s.message) { s.message?.let { snack.showSnackbar(it); vm.consumeMessage() } }
 
@@ -46,20 +48,20 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
                     TextButton(onClick = { pick.launch("*/*") }) { Text("Subir") }
                     TextButton(onClick = { dlg = RDlg.NewFolder }) { Text("Carpeta") }
                     TextButton(onClick = vm::disconnect) { Text("Salir") }
-                } else TextButton(onClick = { dlg = RDlg.Edit(null) }) { Text("Añadir") }
+                } else { TextButton(onClick = { tree.launch(null) }) { Text("Carpeta") }; TextButton(onClick = { dlg = RDlg.Edit(null) }) { Text("Añadir") } }
             }
             if (jobs.isNotEmpty()) TransfersPanel(jobs)
             val a = s.active
             if (a == null) {
                 if (s.profiles.isEmpty()) Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
-                    Text("Sin conexiones. Añade un servidor WebDAV o FTP.\nSFTP y SMB aún no están disponibles.", color = C.dim)
+                    Text("Sin conexiones. Añade un servidor (FTP, FTPS, SFTP, SMB, WebDAV) o una carpeta del sistema.", color = C.dim)
                 } else LazyColumn { items(s.profiles, key = { it.id }) { p ->
                     Row(Modifier.fillMaxWidth().clickable { vm.connect(p) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(p.name, fontWeight = FontWeight.Bold)
-                            Text("${p.protocol} · ${p.user.ifEmpty { "anónimo" }}@${p.host}${if (p.port > 0) ":${p.port}" else ""}", color = C.dim, fontSize = 13.sp)
+                            Text(if (p.protocol == Protocol.SAF) "Carpeta del sistema (acceso concedido por ti)" else "${p.protocol} · ${p.user.ifEmpty { "anónimo" }}@${p.host}${if (p.port > 0) ":${p.port}" else ""}", color = C.dim, fontSize = 13.sp)
                         }
-                        TextButton(onClick = { dlg = RDlg.Edit(p) }) { Text("Editar") }
+                        TextButton(onClick = { dlg = if (p.protocol == Protocol.SAF) RDlg.Remove(p) else RDlg.Edit(p) }) { Text(if (p.protocol == Protocol.SAF) "Quitar" else "Editar") }
                     }
                 } }
             } else {
@@ -99,6 +101,8 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
 
     when (val d = dlg) {
         is RDlg.Edit -> ProfileDialog(d.p, onClose = { dlg = null }, onDelete = { d.p?.let { vm.delete(it.id) }; dlg = null }) { n, pr, h, po, u, b, pw -> vm.save(d.p?.id, n, pr, h, po, u, b, pw); dlg = null }
+        is RDlg.Remove -> AlertDialog(onDismissRequest = { dlg = null }, title = { Text("Quitar «${d.p.name}»") }, text = { Text("Se revoca el acceso de NEXUS a esta carpeta. No se borra nada de ella.") },
+            confirmButton = { TextButton(onClick = { vm.delete(d.p.id); dlg = null }) { Text("Quitar", color = C.danger) } }, dismissButton = { TextButton(onClick = { dlg = null }) { Text("Cancelar") } })
         RDlg.NewFolder -> NameDlg("Nueva carpeta", "", "Crear", { dlg = null }) { vm.mkdir(it); dlg = null }
         is RDlg.Rename -> NameDlg("Renombrar", d.e.name, "Renombrar", { dlg = null }) { vm.rename(d.e, it); dlg = null }
         is RDlg.Delete -> AlertDialog(onDismissRequest = { dlg = null }, title = { Text("Eliminar «${d.e.name}»") },

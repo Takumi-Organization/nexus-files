@@ -56,7 +56,7 @@ Fase 5: remotos, SAF, transferencias y ajustes.
   4 intentos con espera 2-4-8 s (tope 30 s), cancelable; autenticación, permisos, «ya existe» y huellas no confiadas no se reintentan.
 - **Ajustes** (⋮ del explorador): ocultos, cuadrícula, orden, carpetas primero, carpeta de descargas.
 - **Verificado**
-  - JVM: 90 tests en :core. Opt-in (`NEXUS_IT=1`, `NEXUS_FTPS_FP`, `NEXUS_SFTP_FP`, `NEXUS_SFTP_KEYDIR`, `NEXUS_SMB=1`) contra servidores REALES en el host: wsgidav (WebDAV), pyftpdlib
+  - JVM: 92 tests en :core. Opt-in (`NEXUS_IT=1`, `NEXUS_FTPS_FP`, `NEXUS_SFTP_FP`, `NEXUS_SFTP_KEYDIR`, `NEXUS_SMB=1`) contra servidores REALES en el host: wsgidav (WebDAV), pyftpdlib
     (FTP y FTPS autofirmado), asyncssh (SFTP con TOFU y claves RSA/ed25519/con frase) e impacket (SMB, con y sin dominio): crear, subir, no pisar, listar con tildes,
     renombrar, descargar, **reanudar** y borrar. TLS/TOFU sin servidor externo con un certificado de `keytool`; reutilización de sesión TLS y SSLEngine con JDK y con Conscrypt.
   - Emulador (emulator-5554, por 10.0.2.2, contra esos servidores reales): alta de FTP, FTPS, SFTP (contraseña, clave y clave con frase), SMB (con dominio) y WebDAV desde el

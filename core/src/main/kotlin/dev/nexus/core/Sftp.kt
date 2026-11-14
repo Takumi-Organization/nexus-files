@@ -15,7 +15,7 @@ object SshFingerprint {
  * está vacío o no coincide, se lanza [UntrustedHostException] con la huella presentada (TOFU: la interfaz la muestra y, si el usuario
  * acepta, la guarda en el perfil y reintenta).
  */
-class SftpFs(host: String, port: Int = 22, user: String, password: String, private val trusted: String = "", timeoutMs: Int = 15_000) : RemoteFs {
+class SftpFs(host: String, port: Int = 22, user: String, password: String, private val trusted: String = "", timeoutMs: Int = 15_000, privateKey: String = "", passphrase: String = "") : RemoteFs {
     private val session: Session
     private val ch: ChannelSftp
 
@@ -33,10 +33,13 @@ class SftpFs(host: String, port: Int = 22, user: String, password: String, priva
     init {
         val repo = Repo(trusted)
         val js = JSch().apply { hostKeyRepository = repo }
+        if (privateKey.isNotBlank()) try {
+            js.addIdentity("nexus-key", privateKey.trim().toByteArray() + "\n".toByteArray(), null, passphrase.takeIf { it.isNotEmpty() }?.toByteArray())
+        } catch (e: JSchException) { throw RemoteException("Clave privada no válida (formato no admitido o frase de paso incorrecta)", e) }
         val s = js.getSession(user, host, port).apply {
-            setPassword(password)
+            if (password.isNotEmpty()) setPassword(password)
             setConfig("StrictHostKeyChecking", "yes")
-            setConfig("PreferredAuthentications", "password,keyboard-interactive")
+            setConfig("PreferredAuthentications", buildString { if (privateKey.isNotBlank()) append("publickey,"); if (password.isNotEmpty()) append("password,keyboard-interactive,") }.trimEnd(',').ifEmpty { "password" })
             timeout = timeoutMs
         }
         try {
@@ -46,7 +49,7 @@ class SftpFs(host: String, port: Int = 22, user: String, password: String, priva
             s.disconnect()
             if (repo.seen.isNotEmpty() && !(trusted.isNotEmpty() && repo.seen == trusted))
                 throw UntrustedHostException("clave de host SSH", repo.seen, if (trusted.isEmpty()) "Servidor desconocido" else "¡La clave del servidor ha cambiado!")
-            throw RemoteException(if (e.message?.contains("Auth fail", true) == true) "Usuario o contraseña incorrectos" else "SFTP: ${e.message}", e)
+            throw RemoteException(if (e.message?.contains("Auth fail", true) == true) "Autenticación rechazada (usuario, contraseña o clave)" else "SFTP: ${e.message}", e)
         }
         session = s
     }
@@ -76,9 +79,8 @@ class SftpFs(host: String, port: Int = 22, user: String, password: String, priva
             atomicWrite(dest) { pf ->
                 val size = try { ch.stat(p(path)).size } catch (e: SftpException) { -1L }
                 val from = if (pf.offset > 0 && (size < 0 || pf.offset <= size)) pf.offset else 0L
-                m.total = from
                 pf.open(from).use { out -> sftp("Descargar") { if (from > 0) ch.get(p(path), out, m, ChannelSftp.RESUME, from) else ch.get(p(path), out, m) } }
-                if (size >= 0 && m.total != size) throw RemoteException("Descarga incompleta", java.io.EOFException())
+                if (size >= 0 && pf.file.length() != size) throw RemoteException("Descarga incompleta", java.io.EOFException())
             }
         }
         catch (e: Throwable) { m.cancelled?.let { throw it }; throw e }

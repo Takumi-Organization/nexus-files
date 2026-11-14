@@ -156,8 +156,10 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
     override fun mkdir(path: String) { val r = cmd("MKD ${RemotePaths.normalize(path)}"); if (r.code != 257) throw RemoteException("Crear carpeta: ${r.text.lineSequence().first()}") }
 
     override fun delete(path: String, isDir: Boolean) {
-        if (RemotePaths.normalize(path) == "/") throw RemoteException("No se puede borrar la raíz")
-        ok(cmd((if (isDir) "RMD " else "DELE ") + RemotePaths.normalize(path)), "Borrar")
+        val p = RemotePaths.normalize(path)
+        if (p == "/") throw RemoteException("No se puede borrar la raíz")
+        if (isDir) { for (c in list(p)) delete(c.path, c.isDir); ok(cmd("RMD $p"), "Borrar") } // FTP no borra carpetas con contenido
+        else ok(cmd("DELE $p"), "Borrar")
     }
 
     override fun rename(from: String, to: String) {

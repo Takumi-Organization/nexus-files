@@ -34,4 +34,16 @@ class ConnectionsTest {
         assertEquals("https://x.com:8443/remote.php/dav", u("https://x.com:8443/", 0, "/remote.php/dav"))
         assertEquals("https://x.com/dav/files", u("x.com/dav", 0, "files"))
     }
+
+    @Test fun `clave privada y frase de paso se cifran y null conserva lo guardado`() {
+        val f = Files.createTempDirectory("pf").toFile().resolve("p.json")
+        val st = ProfileStore(f, box); val p = RemoteProfile("k", "srv", Protocol.SFTP, "h", 22, "u", domain = "DOM")
+        st.save(p, "", "-----BEGIN OPENSSH PRIVATE KEY-----\nSECRETO\n-----END OPENSSH PRIVATE KEY-----", "frase")
+        assertFalse(f.readText().contains("SECRETO")); assertFalse(f.readText().contains("frase"))
+        assertEquals(Secrets("", "-----BEGIN OPENSSH PRIVATE KEY-----\nSECRETO\n-----END OPENSSH PRIVATE KEY-----", "frase"), st.secrets("k"))
+        st.save(p.copy(name = "otro"), null)                      // editar sin tocar secretos
+        assertEquals("frase", st.secrets("k")!!.passphrase); assertEquals("DOM", st.list().single().domain)
+        st.save(p, null, "", "")                                  // borrar clave y frase
+        assertEquals(Secrets("", "", ""), st.secrets("k"))
+    }
 }

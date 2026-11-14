@@ -12,6 +12,7 @@ json = "20250517"
 coroutines = "1.10.2"
 jsch = "2.28.8"
 smbj = "0.15.0"
+conscrypt = "2.5.2"
 
 [libraries]
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -29,6 +30,7 @@ androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-te
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 jsch = { group = "com.github.mwiede", name = "jsch", version.ref = "jsch" }
 smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
+conscrypt = { group = "org.conscrypt", name = "conscrypt-openjdk-uber", version.ref = "conscrypt" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitExt" }

@@ -125,4 +125,12 @@ class FtpTest {
             assertFalse(RemotePaths.safeName("../x")); assertFalse(RemotePaths.safeName(".."))
         }
     }
+
+    @Test fun `solo rechazos de datos TLS (421, 425, 426, 522) o fallos SSL sugieren reutilizar la sesion`() {
+        assertTrue(FtpFs.suggestsSessionReuse(RemoteException("RETR /a: 522 SSL connection failed; session reuse required")))
+        assertTrue(FtpFs.suggestsSessionReuse(RemoteException("LIST /: 425 Unable to build data connection: TLS session resumption required")))
+        assertTrue(FtpFs.suggestsSessionReuse(javax.net.ssl.SSLHandshakeException("handshake_failure")))
+        assertFalse(FtpFs.suggestsSessionReuse(RemoteException("RETR /a: 550 No such file")))
+        assertFalse(FtpFs.suggestsSessionReuse(UntrustedHostException("certificado", "AA", "x")))
+    }
 }

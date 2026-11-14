@@ -11,5 +11,6 @@ dependencies {
     compileOnly(libs.json)
     testImplementation(libs.json)
     testImplementation(libs.junit)
+    testImplementation(libs.conscrypt)
     testImplementation(libs.kotlinx.coroutines.core)
 }

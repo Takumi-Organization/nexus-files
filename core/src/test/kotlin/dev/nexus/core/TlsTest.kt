@@ -72,3 +72,33 @@ class TlsTest {
         } finally { second.close() }
     }
 }
+
+/** Android usa Conscrypt como proveedor TLS: se repite la comprobación del SSLEngine con él (cliente) contra un servidor JDK. */
+class TlsConscryptTest {
+    private lateinit var server: SSLServerSocket
+    private lateinit var fp: String
+    private lateinit var dir: File
+
+    @Before fun up() {
+        dir = Files.createTempDirectory("tlsc").toFile(); val ks = File(dir, "k.p12")
+        val p = ProcessBuilder(File(System.getProperty("java.home"), "bin/keytool").path, "-genkeypair", "-alias", "s", "-keyalg", "RSA", "-keysize", "2048", "-validity", "2",
+            "-dname", "CN=127.0.0.1", "-ext", "san=ip:127.0.0.1", "-keystore", ks.path, "-storetype", "PKCS12", "-storepass", "changeit").redirectErrorStream(true).start()
+        assertEquals(0, p.waitFor())
+        val store = KeyStore.getInstance("PKCS12").apply { ks.inputStream().use { load(it, "changeit".toCharArray()) } }
+        fp = Fingerprints.sha256Hex(store.getCertificate("s").encoded)
+        val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply { init(store, "changeit".toCharArray()) }
+        server = SSLContext.getInstance("TLS").apply { init(kmf.keyManagers, null, null) }.serverSocketFactory.createServerSocket(0, 5, InetAddress.getByName("127.0.0.1")) as SSLServerSocket
+        thread(isDaemon = true) { while (!server.isClosed) try { server.accept().use { s -> val b = ByteArray(300_000); var n = 0; while (n < b.size) { val r = s.getInputStream().read(b, n, b.size - n); if (r < 0) break; n += r }; s.getOutputStream().write(b, 0, n) } } catch (_: Exception) {} }
+        Tls.provider = org.conscrypt.Conscrypt.newProvider()
+    }
+    @After fun down() { Tls.provider = null; server.close(); dir.deleteRecursively() }
+
+    @Test fun `SSLEngine con Conscrypt envia y recibe 300 KB`() {
+        val data = ByteArray(300_000) { (it * 7).toByte() }
+        val s = Tls.engineSocket(Socket("127.0.0.1", server.localPort), "127.0.0.1", server.localPort, fp)
+        s.getOutputStream().write(data); s.getOutputStream().flush()
+        val back = ByteArray(data.size); var n = 0
+        while (n < back.size) { val r = s.getInputStream().read(back, n, back.size - n); if (r < 0) break; n += r }
+        s.close(); assertEquals(data.size, n); assertArrayEquals(data, back)
+    }
+}

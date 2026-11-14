@@ -74,17 +74,36 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
         }
         if (p !in 1..65535) throw RemoteException("Puerto de datos inválido")
         val d = Socket().apply { connect(InetSocketAddress(host, p), timeoutMs); soTimeout = timeoutMs }
-        return if (tls) Tls.engineSocket(d, host, this.port, pinned).also { dataSession = it.session } else d
+        return if (!tls) d
+        else if (reuseSession) Tls.engineSocket(d, host, this.port, pinned).also { dataSession = it.session }
+        else Tls.wrap(d, host, p, pinned).also { dataSession = it.session }
+    }
+
+    /**
+     * Por defecto las conexiones de datos FTPS usan un SSLSocket normal. Algunos servidores (vsftpd con `require_ssl_reuse`) rechazan
+     * datos cuya sesión TLS no reanude la de control; en ese caso se pasa a [reuseSession] (SSLEngine con la caché de sesiones en el
+     * puerto de control, ver [TlsEngineSocket]) y se repite la operación una vez.
+     */
+    private var reuseSession = false
+
+    internal companion object {
+        private val REUSE_REJECTED = Regex(""": (421|425|426|522) """)
+        fun suggestsSessionReuse(e: Throwable) = e is javax.net.ssl.SSLException && e !is UntrustedHostException || (e is RemoteException && REUSE_REJECTED.containsMatchIn(e.message ?: ""))
     }
 
     private fun <T> withData(command: String, use: (Socket) -> T): T {
-        openData().use { d ->
-            val start = cmd(command)
-            if (start.code !in listOf(125, 150)) throw RemoteException("$command: ${start.text.lineSequence().first()}")
-            val result = use(d)
-            d.close()
-            ok(reply(), command.substringBefore(' '))
-            return result
+        fun attempt(): T {
+            openData().use { d ->
+                val start = cmd(command)
+                if (start.code !in listOf(125, 150)) throw RemoteException("$command: ${start.text.lineSequence().first()}")
+                val result = use(d)
+                d.close()
+                ok(reply(), command.substringBefore(' '))
+                return result
+            }
+        }
+        return try { attempt() } catch (e: Exception) {
+            if (tls && !reuseSession && suggestsSessionReuse(e)) { reuseSession = true; attempt() } else throw e
         }
     }
 

@@ -51,10 +51,13 @@ object Tls {
         }
     }
 
+    /** Solo pruebas: proveedor JSSE alternativo (p. ej. Conscrypt, el que usa Android). */
+    @Volatile internal var provider: java.security.Provider? = null
+
     private fun context(pinned: String): SSLContext {
         val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(null as KeyStore?) }
         val d = tmf.trustManagers.filterIsInstance<X509ExtendedTrustManager>().firstOrNull() ?: throw IOException("Sin gestor de confianza del sistema")
-        return SSLContext.getInstance("TLS").apply { init(null, arrayOf(Tm(d, pinned)), null) }
+        return (provider?.let { SSLContext.getInstance("TLS", it) } ?: SSLContext.getInstance("TLS")).apply { init(null, arrayOf(Tm(d, pinned)), null) }
     }
 
     /** Misma [SSLContext] (y por tanto misma caché de sesiones) para sockets y motores con igual configuración de confianza. */

@@ -55,9 +55,17 @@ class SftpFs(host: String, port: Int = 22, user: String, password: String, priva
     }
 
     private fun p(path: String) = RemotePaths.normalize(path)
-    private fun <T> sftp(op: String, block: () -> T): T = try { block() } catch (e: SftpException) {
-        throw RemoteException("$op: " + when (e.id) { ChannelSftp.SSH_FX_NO_SUCH_FILE -> "no existe"; ChannelSftp.SSH_FX_PERMISSION_DENIED -> "permiso denegado"; else -> e.message ?: "error SFTP" }, e)
+    internal companion object {
+        /** ¿El fallo se debe a que la conexión se cayó (y por tanto merece reconectar y reintentar)? */
+        fun connectionLost(e: Throwable, connected: Boolean): Boolean =
+            !connected || (e is SftpException && (e.id == ChannelSftp.SSH_FX_CONNECTION_LOST || e.id == ChannelSftp.SSH_FX_NO_CONNECTION || e.cause is IOException)) ||
+                e is JSchException || e is IOException
     }
+
+    private fun <T> sftp(op: String, block: () -> T): T = try { block() } catch (e: SftpException) {
+        if (connectionLost(e, session.isConnected && ch.isConnected)) throw RemoteException("$op: se perdió la conexión", java.io.EOFException(e.message))
+        throw RemoteException("$op: " + when (e.id) { ChannelSftp.SSH_FX_NO_SUCH_FILE -> "no existe"; ChannelSftp.SSH_FX_PERMISSION_DENIED -> "permiso denegado"; else -> e.message ?: "error SFTP" }, e)
+    } catch (e: JSchException) { throw RemoteException("$op: se perdió la conexión", java.io.EOFException(e.message)) }
 
     @Suppress("UNCHECKED_CAST")
     override fun list(path: String): List<RemoteEntry> = sftp("Listar") {

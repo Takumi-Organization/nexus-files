@@ -72,3 +72,13 @@ class RetryTest {
         } finally { srv.stop(); tmp.deleteRecursively() }
     }
 }
+
+class SftpClassifyTest {
+    @Test fun `caida de conexion es transitoria y los errores de servidor no`() {
+        assertTrue(SftpFs.connectionLost(com.jcraft.jsch.SftpException(com.jcraft.jsch.ChannelSftp.SSH_FX_CONNECTION_LOST, "x"), true))
+        assertTrue(SftpFs.connectionLost(com.jcraft.jsch.SftpException(com.jcraft.jsch.ChannelSftp.SSH_FX_FAILURE, "Failure", java.io.IOException("Pipe closed")), true))
+        assertTrue(SftpFs.connectionLost(com.jcraft.jsch.SftpException(com.jcraft.jsch.ChannelSftp.SSH_FX_FAILURE, "Failure"), false))
+        assertFalse(SftpFs.connectionLost(com.jcraft.jsch.SftpException(com.jcraft.jsch.ChannelSftp.SSH_FX_PERMISSION_DENIED, "denied"), true))
+        assertFalse(SftpFs.connectionLost(com.jcraft.jsch.SftpException(com.jcraft.jsch.ChannelSftp.SSH_FX_NO_SUCH_FILE, "no"), true))
+    }
+}

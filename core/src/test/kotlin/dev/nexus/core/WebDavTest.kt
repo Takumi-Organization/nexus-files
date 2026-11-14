@@ -14,7 +14,9 @@ import java.nio.file.Files
 import java.util.TreeMap
 
 /** Servidor WebDAV falso en memoria (raíz /dav/). */
-class FakeDav(val user: String = "u", val pass: String = "p") {
+class FakeDav(val user: String = "u", val pass: String = "p", var dropGetAfter: Long = -1) {
+    @Volatile var lastRange: String? = null
+    private var dropped = false
     val files = TreeMap<String, ByteArray?>() // null = carpeta
     private val server = HttpServer.create(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0)
     val port get() = server.address.port
@@ -52,7 +54,16 @@ class FakeDav(val user: String = "u", val pass: String = "p") {
                 sb.append("</D:multistatus>")
                 reply(ex, 207, sb.toString().toByteArray(), "application/xml")
             }
-            "GET" -> files[p]?.let { reply(ex, 200, it) } ?: reply(ex, 404)
+            "GET" -> {
+                val f = files[p] ?: return reply(ex, 404)
+                val range = ex.requestHeaders.getFirst("Range"); lastRange = range
+                val start = range?.removePrefix("bytes=")?.substringBefore('-')?.toIntOrNull() ?: 0
+                val body = f.copyOfRange(start, f.size)
+                if (range != null) ex.responseHeaders.add("Content-Range", "bytes $start-${f.size - 1}/${f.size}")
+                ex.sendResponseHeaders(if (range != null) 206 else 200, body.size.toLong())
+                if (dropGetAfter >= 0 && !dropped) { dropped = true; ex.responseBody.write(body, 0, dropGetAfter.toInt()); ex.responseBody.flush(); ex.close(); return }
+                ex.responseBody.write(body)
+            }
             "PUT" -> {
                 if (files[p.substringBeforeLast('/').ifEmpty { "/" }.let { it }] != null || p.substringBeforeLast('/').ifEmpty { "/" } !in files) return reply(ex, 409)
                 if (ex.requestHeaders.getFirst("If-None-Match") == "*" && p in files) return reply(ex, 412)

@@ -69,15 +69,17 @@ class SmbFs(host: String, port: Int = 445, user: String, password: String, priva
         openRead(path).use { f ->
             // se lee por desplazamientos sin pasar del tamaño: pedir bytes más allá del final hace que algunos servidores (impacket) respondan paquetes que smbj no puede interpretar
             val size = f.fileInformation.standardInformation.endOfFile
-            var off = 0L; val buf = ByteArray(64 * 1024)
-            atomicWrite(dest) { out ->
-                while (off < size) {
-                    val n = f.read(buf, off, 0, minOf(buf.size.toLong(), size - off).toInt())
-                    if (n <= 0) break
-                    out.write(buf, 0, n); off += n; onProgress(off)
+            atomicWrite(dest) { pf ->
+                var off = if (pf.offset in 1..size) pf.offset else 0L; val buf = ByteArray(64 * 1024)
+                pf.open(off).use { out ->
+                    while (off < size) {
+                        val n = f.read(buf, off, 0, minOf(buf.size.toLong(), size - off).toInt())
+                        if (n <= 0) break
+                        out.write(buf, 0, n); off += n; onProgress(off)
+                    }
                 }
+                if (off != size) throw RemoteException("Descarga incompleta", java.io.EOFException())
             }
-            if (off != size) { dest.delete(); throw RemoteException("Descarga incompleta", java.io.EOFException()) }
         }
     }
 

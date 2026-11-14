@@ -120,14 +120,19 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
     }
 
     override fun download(path: String, dest: File, onProgress: (Long) -> Unit) {
-        val size = cmd("SIZE ${RemotePaths.normalize(path)}").let { if (it.code == 213) it.text.substringAfter(' ').trim().toLongOrNull() else null }
-        withData("RETR ${RemotePaths.normalize(path)}") { d ->
-            var total = 0L
-            atomicWrite(dest) { o ->
-                val buf = ByteArray(32 * 1024); val i = d.getInputStream()
-                while (true) { val n = i.read(buf); if (n < 0) break; o.write(buf, 0, n); total += n; onProgress(total) }
+        val p = RemotePaths.normalize(path)
+        val size = cmd("SIZE $p").let { if (it.code == 213) it.text.substringAfter(' ').trim().toLongOrNull() else null }
+        atomicWrite(dest) { pf ->
+            // REST (RFC 3659) reanuda; si el servidor no lo admite se empieza de cero
+            val from = if (pf.offset > 0 && (size == null || pf.offset <= size) && cmd("REST ${pf.offset}").code == 350) pf.offset else 0L
+            withData("RETR $p") { d ->
+                var total = from
+                pf.open(from).use { o ->
+                    val buf = ByteArray(32 * 1024); val i = d.getInputStream()
+                    while (true) { val n = i.read(buf); if (n < 0) break; o.write(buf, 0, n); total += n; onProgress(total) }
+                }
+                if (size != null && size != total) throw RemoteException("Descarga incompleta", java.io.EOFException())
             }
-            if (size != null && size != total) { dest.delete(); throw RemoteException("Descarga incompleta", java.io.EOFException()) }
         }
     }
 

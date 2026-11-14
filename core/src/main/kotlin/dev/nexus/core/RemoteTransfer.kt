@@ -27,7 +27,7 @@ object RemoteTransfer {
                 fs.download(e.path, dest) { n -> if (cancelled()) throw CancellationException("cancelado"); onProgress(base + n, e.name) }
                 bytes += dest.length(); files++
             } catch (c: CancellationException) { throw c }
-            catch (x: Exception) { failed += "${e.path}: ${x.message}" }
+            catch (x: Exception) { File(dest.path + FileOps.PART).delete(); failed += "${e.path}: ${x.message}" }
         }
         fun tree(e: RemoteEntry, dest: File, depth: Int) {
             if (cancelled()) throw CancellationException("cancelado")

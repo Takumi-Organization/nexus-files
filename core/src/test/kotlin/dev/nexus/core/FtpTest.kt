@@ -13,7 +13,9 @@ import java.util.TreeMap
 import kotlin.concurrent.thread
 
 /** Servidor FTP falso en memoria. [mlsd]/[epsv] permiten forzar los caminos alternativos (LIST, PASV). */
-class FakeFtp(val mlsd: Boolean = true, val epsv: Boolean = true) {
+class FakeFtp(val mlsd: Boolean = true, val epsv: Boolean = true, var dropRetrAfter: Long = -1) {
+    @Volatile var lastRest = -1L
+    private var rest = 0L; private var dropped = false
     val files = TreeMap<String, ByteArray?>().apply { put("/", null) }
     private val ss = ServerSocket(0, 5, InetAddress.getByName("127.0.0.1"))
     val port get() = ss.localPort
@@ -51,7 +53,11 @@ class FakeFtp(val mlsd: Boolean = true, val epsv: Boolean = true) {
                         w.write("type=pdir; ..\r\n".takeIf { cmd == "MLSD" } ?: ""); w.flush(); d.close(); say("226 done")
                     }
                     "SIZE" -> say(if (files[arg] != null) "213 ${files[arg]!!.size}" else "550 no")
-                    "RETR" -> { val f = files[arg]; if (f == null) { say("550 no"); data?.close() } else { say("150 go"); val d = dataSock(); d.getOutputStream().write(f); d.close(); say("226 done") } }
+                    "REST" -> { rest = arg.toLong(); lastRest = rest; say("350 ok") }
+                    "RETR" -> { val f = files[arg]; if (f == null) { say("550 no"); data?.close() } else {
+                        say("150 go"); val d = dataSock(); val part = f.copyOfRange(rest.toInt(), f.size); rest = 0
+                        if (dropRetrAfter >= 0 && !dropped) { dropped = true; d.getOutputStream().write(part, 0, dropRetrAfter.toInt()); d.close(); say("426 aborted") }
+                        else { d.getOutputStream().write(part); d.close(); say("226 done") } } }
                     "STOR" -> { say("150 go"); val d = dataSock(); files[arg] = d.getInputStream().readBytes(); d.close(); say("226 done") }
                     "MKD" -> { files[arg] = null; say("257 \"$arg\"") }
                     "DELE" -> say(if (files.remove(arg) != null) "250 ok" else "550 no")

@@ -40,12 +40,26 @@ object RemotePaths {
     fun safeName(n: String): Boolean = n.isNotEmpty() && n != "." && n != ".." && '/' !in n && '\\' !in n && '\u0000' !in n
 }
 
-internal inline fun atomicWrite(dest: File, write: (java.io.OutputStream) -> Unit) {
+/** Fichero temporal de una descarga. Si ya existe con datos de un intento interrumpido, [offset] dice desde dónde se puede reanudar. */
+class PartFile(val file: File) {
+    val offset: Long = if (file.isFile) file.length() else 0L
+    /** Abre el temporal: [startAt] 0 lo trunca; si es [offset] (>0) añade al final. */
+    fun open(startAt: Long): java.io.OutputStream {
+        require(startAt == 0L || startAt == offset) { "Desplazamiento de reanudación no válido" }
+        return java.io.FileOutputStream(file, startAt > 0).buffered()
+    }
+}
+
+/**
+ * Escribe [dest] de forma atómica (temporal + rename). Ante un fallo de red pasajero el temporal se CONSERVA para reanudar en el
+ * siguiente intento; ante cualquier otro error o cancelación se borra. [write] debe cerrar el flujo que abra con [PartFile.open].
+ */
+internal fun atomicWrite(dest: File, write: (PartFile) -> Unit) {
     dest.absoluteFile.parentFile?.mkdirs()
     val part = File(dest.path + FileOps.PART)
     try {
-        part.outputStream().buffered().use(write)
+        write(PartFile(part))
         if (dest.exists()) dest.delete()
         if (!part.renameTo(dest)) throw IOException("No se pudo mover a ${dest.name}")
-    } catch (e: Throwable) { part.delete(); throw e }
+    } catch (e: Throwable) { if (!Retry.isTransient(e) || !part.exists()) part.delete(); throw e }
 }

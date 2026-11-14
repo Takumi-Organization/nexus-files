@@ -77,15 +77,25 @@ class WebDavFs(baseUrl: String, user: String? = null, password: String? = null, 
     }
 
     override fun download(path: String, dest: File, onProgress: (Long) -> Unit) {
-        http.request("GET", enc(path)).use { r ->
-            if (r.status != 200) fail("Descargar", r.status, path)
-            val expected = r.headers["content-length"]?.toLongOrNull()
-            var total = 0L
-            atomicWrite(dest) { out ->
-                val buf = ByteArray(32 * 1024)
-                while (true) { val n = r.body.read(buf); if (n < 0) break; out.write(buf, 0, n); total += n; onProgress(total) }
+        atomicWrite(dest) { pf ->
+            val headers = if (pf.offset > 0) mapOf("Range" to "bytes=${pf.offset}-") else emptyMap()
+            http.request("GET", enc(path), headers).use { r ->
+                if (r.status == 416) { pf.file.delete(); throw RemoteException("Descarga previa inservible, se repite", java.io.EOFException()) }
+                // 206 = el servidor reanuda; 200 = ignora Range y manda todo, se empieza de cero
+                val from = when (r.status) {
+                    206 -> Regex("""bytes (\d+)-""").find(r.headers["content-range"] ?: "")?.groupValues?.get(1)?.toLongOrNull()?.takeIf { it == pf.offset }
+                        ?: throw RemoteException("Respuesta de reanudación inválida")
+                    200 -> 0L
+                    else -> fail("Descargar", r.status, path)
+                }
+                val expected = r.headers["content-length"]?.toLongOrNull()?.let { it + from }
+                var total = from
+                pf.open(from).use { out ->
+                    val buf = ByteArray(32 * 1024)
+                    while (true) { val n = r.body.read(buf); if (n < 0) break; out.write(buf, 0, n); total += n; onProgress(total) }
+                }
+                if (expected != null && expected != total) throw RemoteException("Descarga incompleta", java.io.EOFException())
             }
-            if (expected != null && expected != total) { dest.delete(); throw RemoteException("Descarga incompleta", java.io.EOFException()) }
         }
     }
 

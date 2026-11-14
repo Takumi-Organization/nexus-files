@@ -72,7 +72,15 @@ class SftpFs(host: String, port: Int = 22, user: String, password: String, priva
 
     override fun download(path: String, dest: File, onProgress: (Long) -> Unit) {
         val m = Mon(onProgress)
-        try { atomicWrite(dest) { out -> sftp("Descargar") { ch.get(p(path), out, m) } } }
+        try {
+            atomicWrite(dest) { pf ->
+                val size = try { ch.stat(p(path)).size } catch (e: SftpException) { -1L }
+                val from = if (pf.offset > 0 && (size < 0 || pf.offset <= size)) pf.offset else 0L
+                m.total = from
+                pf.open(from).use { out -> sftp("Descargar") { if (from > 0) ch.get(p(path), out, m, ChannelSftp.RESUME, from) else ch.get(p(path), out, m) } }
+                if (size >= 0 && m.total != size) throw RemoteException("Descarga incompleta", java.io.EOFException())
+            }
+        }
         catch (e: Throwable) { m.cancelled?.let { throw it }; throw e }
     }
 

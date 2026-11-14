@@ -79,15 +79,39 @@ class SafFs(ctx: Context, private val tree: Uri) : RemoteFs {
     }
 
     override fun rename(from: String, to: String) {
-        if (RemotePaths.parent(from) != RemotePaths.parent(to)) throw RemoteException("Renombrar: solo dentro de la misma carpeta")
-        if (resolve(to) != null) throw RemoteException("Renombrar: ya existe ${RemotePaths.normalize(to)}")
-        DocumentsContract.renameDocument(cr, docUri(need(from, "Renombrar").id), RemotePaths.nameOf(to)) ?: throw RemoteException("Renombrar: el proveedor no pudo renombrar")
+        val f = RemotePaths.normalize(from); val t = RemotePaths.normalize(to)
+        if (resolve(t) != null) throw RemoteException("Renombrar: ya existe $t")
+        val src = need(f, "Renombrar")
+        if (RemotePaths.parent(f) == RemotePaths.parent(t)) {
+            DocumentsContract.renameDocument(cr, docUri(src.id), RemotePaths.nameOf(t)) ?: throw RemoteException("Renombrar: el proveedor no pudo renombrar")
+            return
+        }
+        // otra carpeta: mover nativo si el proveedor lo permite; si no, copiar y borrar
+        val srcParent = need(RemotePaths.parent(f), "Mover"); val dstParent = need(RemotePaths.parent(t), "Mover")
+        if (!dstParent.isDir) throw RemoteException("Mover: el destino no es una carpeta")
+        val moved = try { DocumentsContract.moveDocument(cr, docUri(src.id), docUri(srcParent.id), docUri(dstParent.id)) } catch (e: Exception) { null }
+        if (moved != null) {
+            if (RemotePaths.nameOf(t) != src.name) DocumentsContract.renameDocument(cr, moved, RemotePaths.nameOf(t)) ?: throw RemoteException("Mover: movido pero no se pudo renombrar")
+            return
+        }
+        copyTree(src, dstParent.id, RemotePaths.nameOf(t))
+        if (!DocumentsContract.deleteDocument(cr, docUri(src.id))) throw RemoteException("Mover: copiado pero no se pudo borrar el original")
+    }
+
+    /** Copia recursiva dentro del mismo árbol (respaldo de [rename] entre carpetas). Si algo falla, borra lo ya copiado de este elemento. */
+    private fun copyTree(src: Child, dstParentId: String, name: String) {
+        val created = DocumentsContract.createDocument(cr, docUri(dstParentId), if (src.isDir) DocumentsContract.Document.MIME_TYPE_DIR else src.mime.ifEmpty { "application/octet-stream" }, name)
+            ?: throw RemoteException("Mover: el proveedor no pudo crear «$name»")
+        try {
+            if (src.isDir) { val newId = DocumentsContract.getDocumentId(created); for (c in children(src.id)) copyTree(c, newId, c.name) }
+            else (cr.openInputStream(docUri(src.id)) ?: throw RemoteException("Mover: no se pudo leer ${src.name}")).use { i -> (cr.openOutputStream(created, "wt") ?: throw RemoteException("Mover: no se pudo escribir")).use { o -> i.copyTo(o) } }
+        } catch (e: Throwable) { try { DocumentsContract.deleteDocument(cr, created) } catch (_: Exception) {}; throw e }
     }
 }
 
 /** Abre cualquier conexión: SAF aquí (necesita Android), el resto en :core. */
 object AppRemote {
-    fun open(ctx: Context, p: RemoteProfile, password: String): RemoteFs = if (p.protocol == Protocol.SAF) SafFs(ctx, Uri.parse(p.host)) else RemoteFactory.open(p, password)
-    fun password(store: ProfileStore, p: RemoteProfile): String =
-        if (p.protocol == Protocol.SAF) "" else store.password(p.id) ?: throw RemoteException("No se pudo recuperar la contraseña guardada: edita la conexión y vuelve a escribirla")
+    fun open(ctx: Context, p: RemoteProfile, s: Secrets): RemoteFs = if (p.protocol == Protocol.SAF) SafFs(ctx, Uri.parse(p.host)) else RemoteFactory.open(p, s)
+    fun secrets(store: ProfileStore, p: RemoteProfile): Secrets =
+        if (p.protocol == Protocol.SAF) Secrets() else store.secrets(p.id) ?: throw RemoteException("No se pudieron recuperar las credenciales guardadas: edita la conexión y vuelve a escribirlas")
 }

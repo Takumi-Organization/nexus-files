@@ -37,13 +37,14 @@ class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
     fun refreshProfiles() { viewModelScope.launch { val l = withContext(Dispatchers.IO) { store.list() }; _s.update { it.copy(profiles = l) } } }
 
     /** Contraseña vacía al editar = conservar la guardada. */
-    fun save(existingId: String?, name: String, protocol: Protocol, host: String, port: Int, user: String, basePath: String, password: String) {
+    fun save(existingId: String?, name: String, protocol: Protocol, host: String, port: Int, user: String, basePath: String, password: String, domain: String = "", privateKey: String = "", passphrase: String = "") {
         viewModelScope.launch(Dispatchers.IO) {
             val old = _s.value.profiles.firstOrNull { it.id == existingId }
             // la huella solo se conserva si sigue siendo el mismo servidor
             val keep = old?.takeIf { it.protocol == protocol && it.host == host.trim() && it.port == port }?.trusted ?: ""
-            val p = RemoteProfile(existingId ?: UUID.randomUUID().toString(), name.trim(), protocol, host.trim(), port, user.trim(), basePath.trim(), keep)
-            store.save(p, password.ifEmpty { null }); refreshProfiles()
+            val p = RemoteProfile(existingId ?: UUID.randomUUID().toString(), name.trim(), protocol, host.trim(), port, user.trim(), basePath.trim(), keep, domain.trim())
+            // vacío = conservar lo guardado; la clave solo se reemplaza si se pega/elige una nueva (y entonces su frase de paso también)
+            store.save(p, password.ifEmpty { null }, privateKey.ifBlank { null }, if (privateKey.isNotBlank()) passphrase else null); refreshProfiles()
         }
     }
 
@@ -64,7 +65,7 @@ class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Abre una conexión nueva por operación: si una sesión FTP queda a medias tras un error, no contamina la siguiente. */
     private fun <T> withFs(p: RemoteProfile, block: (RemoteFs) -> T): T {
-        return AppRemote.open(app, p, AppRemote.password(store, p)).use(block)
+        return AppRemote.open(app, p, AppRemote.secrets(store, p)).use(block)
     }
 
     fun connect(p: RemoteProfile) { _s.update { it.copy(active = p, path = "/", entries = emptyList(), error = null) }; list("/") }
@@ -87,6 +88,8 @@ class RemoteViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun mkdir(name: String) = op("Carpeta creada") { fs, p -> fs.mkdir(RemotePaths.child(p, requireName(name))) }
     fun rename(e: RemoteEntry, name: String) = op("Renombrado") { fs, _ -> fs.rename(e.path, RemotePaths.child(RemotePaths.parent(e.path), requireName(name))) }
+    /** Mueve [e] a la carpeta [destDir] (ruta remota) conservando el nombre; no sobrescribe. */
+    fun move(e: RemoteEntry, destDir: String) = op("Movido") { fs, _ -> fs.rename(e.path, RemotePaths.child(RemotePaths.normalize(destDir), e.name)) }
     fun delete(e: RemoteEntry) = op("Eliminado") { fs, _ -> fs.delete(e.path, e.isDir) }
 
     private fun requireName(n: String): String = (Names.validate(n) as? Names.Result.Ok)?.name ?: throw RemoteException((Names.validate(n) as Names.Result.Invalid).reason)

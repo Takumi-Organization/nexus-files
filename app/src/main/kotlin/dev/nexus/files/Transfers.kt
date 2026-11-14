@@ -58,8 +58,8 @@ object Transfers {
     /** Conexión con reconexión y reintentos (hasta 4 intentos, espera 2-4-8 s); el estado del reintento se ve en la lista. */
     private fun open(ctx: Context, profile: RemoteProfile, id: Int, cancelled: () -> Boolean): RemoteFs {
         val store = ProfileStore(File(ctx.filesDir, "remotes.json"), KeystoreSecretBox())
-        val pw = AppRemote.password(store, profile)
-        return RetryingFs({ AppRemote.open(ctx, profile, pw) }, RetryPolicy(4, 2_000, 30_000), cancelled,
+        val sec = AppRemote.secrets(store, profile)
+        return RetryingFs({ AppRemote.open(ctx, profile, sec) }, RetryPolicy(4, 2_000, 30_000), cancelled,
             onRetry = { n, d, e -> update(id) { j -> j.copy(current = "Reintentando ($n/4) en ${d / 1000} s: ${e.message ?: e.javaClass.simpleName}") } })
     }
 

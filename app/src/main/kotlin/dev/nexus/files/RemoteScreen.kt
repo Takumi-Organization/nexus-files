@@ -27,6 +27,7 @@ private sealed interface RDlg {
     data object NewFolder : RDlg
     data class Rename(val e: RemoteEntry) : RDlg
     data class Delete(val e: RemoteEntry) : RDlg
+    data class Move(val e: RemoteEntry) : RDlg
     data class Menu(val e: RemoteEntry) : RDlg
 }
 
@@ -100,11 +101,12 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
     }
 
     when (val d = dlg) {
-        is RDlg.Edit -> ProfileDialog(d.p, onClose = { dlg = null }, onDelete = { d.p?.let { vm.delete(it.id) }; dlg = null }) { n, pr, h, po, u, b, pw -> vm.save(d.p?.id, n, pr, h, po, u, b, pw); dlg = null }
+        is RDlg.Edit -> ProfileDialog(d.p, onClose = { dlg = null }, onDelete = { d.p?.let { vm.delete(it.id) }; dlg = null }) { n, pr, h, po, u, b, pw, dom, key, pass -> vm.save(d.p?.id, n, pr, h, po, u, b, pw, dom, key, pass); dlg = null }
         is RDlg.Remove -> AlertDialog(onDismissRequest = { dlg = null }, title = { Text("Quitar «${d.p.name}»") }, text = { Text("Se revoca el acceso de NEXUS a esta carpeta. No se borra nada de ella.") },
             confirmButton = { TextButton(onClick = { vm.delete(d.p.id); dlg = null }) { Text("Quitar", color = C.danger) } }, dismissButton = { TextButton(onClick = { dlg = null }) { Text("Cancelar") } })
         RDlg.NewFolder -> NameDlg("Nueva carpeta", "", "Crear", { dlg = null }) { vm.mkdir(it); dlg = null }
         is RDlg.Rename -> NameDlg("Renombrar", d.e.name, "Renombrar", { dlg = null }) { vm.rename(d.e, it); dlg = null }
+        is RDlg.Move -> PathDlg("Mover «${d.e.name}» a", s.path, "Mover", { dlg = null }) { vm.move(d.e, it); dlg = null }
         is RDlg.Delete -> AlertDialog(onDismissRequest = { dlg = null }, title = { Text("Eliminar «${d.e.name}»") },
             text = { Text(if (d.e.isDir) "Se borra la carpeta y todo su contenido en el servidor. No hay papelera." else "Se borra del servidor. No hay papelera.") },
             confirmButton = { TextButton(onClick = { vm.delete(d.e); dlg = null }) { Text("Eliminar", color = C.danger) } },
@@ -113,6 +115,7 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
             text = { Column {
                 TextButton(onClick = { vm.download(d.e); dlg = null }) { Text("Descargar a ${vm.downloadDir().name}") }
                 TextButton(onClick = { dlg = RDlg.Rename(d.e) }) { Text("Renombrar") }
+                TextButton(onClick = { dlg = RDlg.Move(d.e) }) { Text("Mover a…") }
                 TextButton(onClick = { dlg = RDlg.Delete(d.e) }) { Text("Eliminar", color = C.danger) }
             } })
         null -> {}
@@ -138,6 +141,14 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
     }
 }
 
+@Composable private fun PathDlg(title: String, initial: String, ok: String, onDismiss: () -> Unit, onOk: (String) -> Unit) {
+    var v by remember { mutableStateOf(initial) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) },
+        text = { OutlinedTextField(v, { v = it }, singleLine = true, label = { Text("Carpeta de destino (ruta, p. ej. /fotos)") }) },
+        confirmButton = { TextButton(enabled = v.isNotBlank(), onClick = { onOk(v) }) { Text(ok) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
+}
+
 @Composable private fun NameDlg(title: String, initial: String, ok: String, onDismiss: () -> Unit, onOk: (String) -> Unit) {
     var v by remember { mutableStateOf(initial) }
     val check = Names.validate(v)
@@ -148,7 +159,7 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable private fun ProfileDialog(p: RemoteProfile?, onClose: () -> Unit, onDelete: () -> Unit, onSave: (String, Protocol, String, Int, String, String, String) -> Unit) {
+@Composable private fun ProfileDialog(p: RemoteProfile?, onClose: () -> Unit, onDelete: () -> Unit, onSave: (String, Protocol, String, Int, String, String, String, String, String, String) -> Unit) {
     var name by remember { mutableStateOf(p?.name ?: "") }
     var proto by remember { mutableStateOf(p?.protocol ?: Protocol.WEBDAV) }
     var host by remember { mutableStateOf((p?.host ?: "").substringAfter("://")) }
@@ -157,8 +168,13 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
     var user by remember { mutableStateOf(p?.user ?: "") }
     var base by remember { mutableStateOf(p?.basePath ?: "") }
     var pw by remember { mutableStateOf("") }
+    var domain by remember { mutableStateOf(p?.domain ?: "") }
+    var key by remember { mutableStateOf("") }
+    var pass by remember { mutableStateOf("") }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pickKey = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) key = runCatching { ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes().take(64 * 1024).toByteArray().toString(Charsets.UTF_8) } }.getOrDefault("") }
     val portN = if (port.isEmpty()) (0) else port.toIntOrNull()
-    val valid = name.isNotBlank() && host.isNotBlank() && portN != null && portN in 0..65535 && (proto != Protocol.SMB || base.isNotBlank()) && (p != null || pw.isNotEmpty() || user.isEmpty())
+    val valid = name.isNotBlank() && host.isNotBlank() && portN != null && portN in 0..65535 && (proto != Protocol.SMB || base.isNotBlank()) && (p != null || pw.isNotEmpty() || user.isEmpty() || (proto == Protocol.SFTP && key.isNotBlank()))
     AlertDialog(onDismissRequest = onClose, title = { Text(if (p == null) "Nueva conexión" else "Editar conexión") },
         text = { Column {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Protocol.entries.forEach { FilterChip(proto == it, { proto = it }, { Text(it.name) }) } }
@@ -170,8 +186,14 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
             if (proto == Protocol.SMB) OutlinedTextField(base, { base = it }, singleLine = true, label = { Text("Recurso compartido") })
             OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Usuario") })
             OutlinedTextField(pw, { pw = it }, singleLine = true, visualTransformation = PasswordVisualTransformation(), label = { Text(if (p == null) "Contraseña" else "Contraseña (vacío = conservar)") })
-            Text("La contraseña se guarda cifrada con Android Keystore.", color = C.dim, fontSize = 12.sp)
+            if (proto == Protocol.SMB) OutlinedTextField(domain, { domain = it }, singleLine = true, label = { Text("Dominio (opcional)") })
+            if (proto == Protocol.SFTP) {
+                OutlinedTextField(key, { key = it }, minLines = 3, maxLines = 4, label = { Text(if (p == null) "Clave privada (pegar, opcional)" else "Clave privada (vacío = conservar)") }, visualTransformation = PasswordVisualTransformation())
+                TextButton(onClick = { pickKey.launch("*/*") }) { Text("Elegir archivo de clave…") }
+                if (key.isNotBlank()) OutlinedTextField(pass, { pass = it }, singleLine = true, visualTransformation = PasswordVisualTransformation(), label = { Text("Frase de paso de la clave (si tiene)") })
+            }
+            Text("Contraseña, clave y frase de paso se guardan cifradas con Android Keystore.", color = C.dim, fontSize = 12.sp)
         } },
-        confirmButton = { TextButton(enabled = valid, onClick = { onSave(name, proto, if (proto == Protocol.WEBDAV && plain) "http://${host.trim()}" else host.trim(), portN ?: 0, user, if (proto == Protocol.WEBDAV || proto == Protocol.SMB) base else "", pw) }) { Text("Guardar") } },
+        confirmButton = { TextButton(enabled = valid, onClick = { onSave(name, proto, if (proto == Protocol.WEBDAV && plain) "http://${host.trim()}" else host.trim(), portN ?: 0, user, if (proto == Protocol.WEBDAV || proto == Protocol.SMB) base else "", pw, if (proto == Protocol.SMB) domain else "", if (proto == Protocol.SFTP) key else "", pass) }) { Text("Guardar") } },
         dismissButton = { Row { if (p != null) TextButton(onClick = onDelete) { Text("Borrar", color = C.danger) }; TextButton(onClick = onClose) { Text("Cancelar") } } })
 }

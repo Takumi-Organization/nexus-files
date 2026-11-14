@@ -19,6 +19,9 @@ import java.util.Locale
  */
 class FtpFs(private val host: String, private val port: Int = 21, private val user: String = "anonymous", password: String = "anonymous@", private val timeoutMs: Int = 15_000, private val tls: Boolean = false, private val pinned: String = "") : RemoteFs {
     private var sock: Socket = Socket().apply { connect(InetSocketAddress(host, this@FtpFs.port), timeoutMs); soTimeout = timeoutMs }
+    /** Sesión TLS de la última conexión de datos (para comprobar en tests que reutiliza la de control). */
+    internal var dataSession: javax.net.ssl.SSLSession? = null
+    internal val controlSession: javax.net.ssl.SSLSession? get() = (sock as? javax.net.ssl.SSLSocket)?.session
     private var ctl = sock.getInputStream().bufferedReader(Charsets.UTF_8)
     private var out = sock.getOutputStream().bufferedWriter(Charsets.UTF_8)
 
@@ -71,7 +74,7 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
         }
         if (p !in 1..65535) throw RemoteException("Puerto de datos inválido")
         val d = Socket().apply { connect(InetSocketAddress(host, p), timeoutMs); soTimeout = timeoutMs }
-        return if (tls) Tls.wrap(d, host, p, pinned) else d
+        return if (tls) Tls.engineSocket(d, host, this.port, pinned).also { dataSession = it.session } else d
     }
 
     private fun <T> withData(command: String, use: (Socket) -> T): T {

@@ -51,7 +51,7 @@ class RealServersTest {
         on(); val fp = System.getenv("NEXUS_FTPS_FP") ?: return
         val e = assertThrows(UntrustedHostException::class.java) { FtpFs("127.0.0.1", 2990, "ana", "secreto", tls = true) }
         assertTrue(Fingerprints.same(fp, e.fingerprint))
-        FtpFs("127.0.0.1", 2990, "ana", "secreto", tls = true, pinned = fp).use(::roundTrip)
+        FtpFs("127.0.0.1", 2990, "ana", "secreto", tls = true, pinned = fp).use { roundTrip(it); resume(it) }
     }
 
     /** asyncssh en :2222 (ana/secreto); la huella sale de NEXUS_SFTP_FP (`ssh-keygen -lf hostkey.pub`). */

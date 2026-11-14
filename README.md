@@ -20,21 +20,22 @@ huellas (ambas OFL; licencias en `docs/`), neutros con matiz azul-tinta en lugar
 
 ### Fluidez con miles de archivos
 
-Carpeta de prueba con **3.000 archivos** en el emulador (Android 16, 1080×2424), 12 gestos de desplazamiento por
-pasada y `dumpsys gfxinfo`:
+Carpeta con **3.000 archivos**, 24 gestos de desplazamiento (3 pasadas de 4 subidas y 4 bajadas) y `dumpsys gfxinfo`.
 
-| Versión | p50 | p90 | p99 | Fotogramas con jank |
-|---|---|---|---|---|
-| Antes de la pasada de rendimiento | 34–36 ms | — | — | 8–12 % |
-| Actual | 16–27 ms | 18–31 ms | 29–44 ms | 1,6–2,8 % |
+| Dispositivo y build | Fotogramas | p50 | p90 | p99 | Jank |
+|---|---|---|---|---|---|
+| Móvil real 25053PC47G, Android 16, **release** (R8) | 1.770 | 9 ms | 12 ms | 18 ms | 0,06 % |
+| Mismo móvil, build **debug** | 394 | 36 ms | 69 ms | 101 ms | 34,8 % |
+| Emulador, debug (medición de la pasada de rendimiento) | n/d | 16-27 ms | 18-31 ms | 29-44 ms | 1,6-2,8 % |
 
-Cambios que explican la mejora: las filas no animan su entrada ni crean una capa (`graphicsLayer`) por elemento; el
-realce de pulsación se reserva a botones; el halo ambiental se rasteriza a un tercio de resolución y no se dibuja bajo
-listas largas; el rectángulo de origen de la transición se guarda sin estado para no recomponer en cada fotograma de
-scroll; lista y cuadrícula usan claves estables por ruta.
+Conclusiones: la build **release** es fluida con miles de archivos en el móvil físico; la debug no lo es (Compose sin
+optimizar y sin R8), así que las cifras de rendimiento solo valen para release. La comparación «antes/después» de la
+pasada de rendimiento (34-36 ms, 8-12 % de jank) **no se puede reproducir ni se considera válida**: se midió solo en
+emulador y sin controlar la versión base; no se cita como evidencia. La aprobación estética queda pendiente de Adrián.
 
-**Límite**: son cifras de emulador; en un dispositivo físico no se han medido y la aprobación estética final queda
-pendiente de revisión humana.
+Cambios de la pasada de rendimiento: las filas no animan su entrada ni crean una capa (`graphicsLayer`) por elemento;
+el halo ambiental se rasteriza a un tercio de resolución y no se dibuja bajo listas largas; lista y cuadrícula usan
+claves estables por ruta.
 
 ## Estado (fases 1 a 5)
 Hecho y verificado: explorador (raíces interna/SD, breadcrumbs, lista/cuadrícula, orden, ocultos, selección múltiple con háptico,
@@ -52,7 +53,7 @@ reasignan (se podan al arrancar); renombrar sí los conserva.
 
 Limitación del analizador: los temporales se identifican por nombre/extensión (cachés, .tmp, .bak…), no por análisis de contenido.
 
-Fase 4 (código compilado, UI sin verificar en pantalla): ZIP (listar/extraer sin zip-slip, crear; 8 tests) y visores internos (JSON, XML, código, imagen, PDF, ZIP, audio, vídeo).
+Fase 4: ZIP (listar/extraer sin zip-slip, crear; 8 tests) y visores internos (JSON, XML, código, imagen, PDF, ZIP, audio, vídeo).
 
 Fase 4, verificado en emulador (Android 16-ish, emulator-5554, 2026-11-13): visores de JSON (formateado, con numeración), XML, código, imagen PNG,
 PDF (PdfRenderer), audio mp3 (reproductor con barra) y vídeo mp4 (VideoView), y el flujo ZIP (listar, «Extraer todo»). Hallazgo corregido:
@@ -95,7 +96,7 @@ Fase 5: remotos, SAF, transferencias y ajustes.
   4 intentos con espera 2-4-8 s (tope 30 s), cancelable; autenticación, permisos, «ya existe» y huellas no confiadas no se reintentan.
 - **Ajustes** (⋮ del explorador): ocultos, cuadrícula, orden, carpetas primero, carpeta de descargas.
 - **Verificado**
-  - JVM: 94 tests en :core (7 opt-in). Opt-in (`NEXUS_IT=1`, `NEXUS_FTPS_FP`, `NEXUS_SFTP_FP`, `NEXUS_SFTP_KEYDIR`, `NEXUS_SMB=1`) contra servidores REALES en el host: wsgidav (WebDAV), pyftpdlib
+  - JVM: 94 tests en :core (7 opt-in) y 10 en :app (`ViewerTextTest`: selección de visor, formateo JSON/XML, binarios, truncado a 1 MB, tamaños). Lint: 0 errores. Opt-in (`NEXUS_IT=1`, `NEXUS_FTPS_FP`, `NEXUS_SFTP_FP`, `NEXUS_SFTP_KEYDIR`, `NEXUS_SMB=1`) contra servidores REALES en el host: wsgidav (WebDAV), pyftpdlib
     (FTP y FTPS autofirmado), asyncssh (SFTP con TOFU y claves RSA/ed25519/con frase) e impacket (SMB, con y sin dominio): crear, subir, no pisar, listar con tildes,
     renombrar, descargar, **reanudar** y borrar. TLS/TOFU sin servidor externo con un certificado de `keytool`; reutilización de sesión TLS y SSLEngine con JDK y con Conscrypt.
   - Emulador (emulator-5554, por 10.0.2.2, contra esos servidores reales): alta de FTP, FTPS, SFTP (contraseña, clave y clave con frase), SMB (con dominio) y WebDAV desde el
@@ -114,6 +115,11 @@ Fase 5: remotos, SAF, transferencias y ajustes.
   - `KeystoreSecretBox` en un dispositivo físico.
 
 Límites asumidos: la identidad SFTP/FTPS se fija por huella (no hay autoridades propias), las descargas SAF→local no se reanudan, SMB no admite Kerberos.
+
+## Instalación y estado
+Release instalado en el móvil físico (firmado con la clave de depuración; no apto para publicar): arranca sin errores en logcat y
+lista 3.000 archivos con fluidez (ver arriba). Para firmar y publicar hace falta una clave propia. Visores y ZIP solo se han
+verificado en emulador (los atajos `VIEW_PATH`/`OPEN_DIR` existen solo en debug); en el móvil real solo se probó el explorador.
 
 ## Probar
 `./gradlew :core:test` · `./gradlew :app:assembleDebug` · permiso: `adb shell appops set dev.nexus.files MANAGE_EXTERNAL_STORAGE allow`

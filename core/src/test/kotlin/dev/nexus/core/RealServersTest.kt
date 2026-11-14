@@ -94,6 +94,7 @@ class RealServersTest {
             fs.download("/dbg.bin", File(tmp, "o2.bin")); assertEquals(300_000L, File(tmp, "o2.bin").length()); fs.delete("/dbg.bin", false)
             roundTrip(fs); resume(fs)
         }
+        FtpFs("127.0.0.1", 2992, "ana", "secreto", tls = true, pinned = fp, tlsProtocols = arrayOf("TLSv1.2")).use { roundTrip(it); resume(it) }
         Tls.provider = org.conscrypt.Conscrypt.newProvider()
         try { FtpFs("127.0.0.1", 2992, "ana", "secreto", tls = true, pinned = fp + "").use { roundTrip(it) } } finally { Tls.provider = null }
     }

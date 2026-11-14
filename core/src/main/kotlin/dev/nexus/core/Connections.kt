@@ -18,6 +18,9 @@ data class Secrets(val password: String = "", val privateKey: String = "", val p
 interface SecretBox { fun encrypt(plain: String): String; fun decrypt(token: String): String }
 
 object RemoteFactory {
+    /** Valor de [RemoteProfile.basePath] en FTPS para limitar a TLS 1.2 (reanudación de sesión por identificador; la piden servidores como vsftpd). */
+    const val TLS12 = "tls12"
+
     /** WEBDAV: [RemoteProfile.host] puede llevar `http://` o `https://`; sin esquema se asume https. El puerto y la ruta base se añaden aquí. */
     fun webDavUrl(p: RemoteProfile): String {
         val plain = p.host.startsWith("http://", ignoreCase = true)
@@ -33,7 +36,7 @@ object RemoteFactory {
 
     fun open(p: RemoteProfile, s: Secrets): RemoteFs = when (p.protocol) {
         Protocol.FTP -> FtpFs(p.host, p.port.takeIf { it > 0 } ?: 21, p.user, s.password)
-        Protocol.FTPS -> FtpFs(p.host, p.port.takeIf { it > 0 } ?: 21, p.user, s.password, tls = true, pinned = p.trusted)
+        Protocol.FTPS -> FtpFs(p.host, p.port.takeIf { it > 0 } ?: 21, p.user, s.password, tls = true, pinned = p.trusted, tlsProtocols = if (p.basePath == TLS12) arrayOf("TLSv1.2") else null)
         Protocol.WEBDAV -> WebDavFs(webDavUrl(p), p.user.ifEmpty { null }, s.password, pinned = p.trusted)
         Protocol.SFTP -> SftpFs(p.host, p.port.takeIf { it > 0 } ?: 22, p.user, s.password, p.trusted, privateKey = s.privateKey, passphrase = s.passphrase)
         Protocol.SAF -> throw RemoteException("Las carpetas del sistema solo se abren desde la app")

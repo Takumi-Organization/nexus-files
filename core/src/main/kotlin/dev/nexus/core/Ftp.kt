@@ -17,7 +17,7 @@ import java.util.Locale
  * (usuario, contraseña y datos en claro); con [tls] usa FTPS explícito (AUTH TLS) validando el certificado (o su huella [pinned]). La conexión de datos se abre siempre contra
  * el host de control, ignorando la IP que anuncie PASV (evita servidores que redirigen a terceros).
  */
-class FtpFs(private val host: String, private val port: Int = 21, private val user: String = "anonymous", password: String = "anonymous@", private val timeoutMs: Int = 15_000, private val tls: Boolean = false, private val pinned: String = "") : RemoteFs {
+class FtpFs(private val host: String, private val port: Int = 21, private val user: String = "anonymous", password: String = "anonymous@", private val timeoutMs: Int = 15_000, private val tls: Boolean = false, private val pinned: String = "", private val tlsProtocols: Array<String>? = null) : RemoteFs {
     private var sock: Socket = Socket().apply { connect(InetSocketAddress(host, this@FtpFs.port), timeoutMs); soTimeout = timeoutMs }
     /** Sesión TLS de la última conexión de datos (para comprobar en tests que reutiliza la de control). */
     internal var dataSession: javax.net.ssl.SSLSession? = null
@@ -32,7 +32,7 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
             expect(reply(), 220, "Conexión")
             if (tls) { // FTPS explícito (RFC 4217): AUTH TLS y luego PBSZ 0 / PROT P para cifrar también los datos
                 expect(cmd("AUTH TLS"), 234, "AUTH TLS")
-                sock = Tls.wrap(sock, host, this@FtpFs.port, pinned)
+                sock = Tls.wrap(sock, host, this@FtpFs.port, pinned, protocols = tlsProtocols)
                 ctl = sock.getInputStream().bufferedReader(Charsets.UTF_8); out = sock.getOutputStream().bufferedWriter(Charsets.UTF_8)
             }
             val u = cmd("USER $user")
@@ -75,8 +75,8 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
         if (p !in 1..65535) throw RemoteException("Puerto de datos inválido")
         val d = Socket().apply { connect(InetSocketAddress(host, p), timeoutMs); soTimeout = timeoutMs }
         return if (!tls) d
-        else if (reuseSession) Tls.engineSocket(d, host, this.port, pinned).also { dataSession = it.session }
-        else Tls.wrap(d, host, p, pinned).also { dataSession = it.session }
+        else if (reuseSession) Tls.engineSocket(d, host, this.port, pinned, tlsProtocols).also { dataSession = it.session }
+        else Tls.wrap(d, host, p, pinned, protocols = tlsProtocols).also { dataSession = it.session }
     }
 
     /**

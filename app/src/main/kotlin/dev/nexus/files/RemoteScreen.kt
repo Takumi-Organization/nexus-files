@@ -184,6 +184,7 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
             if (proto == Protocol.WEBDAV) Row(Modifier.clickable { plain = !plain }, verticalAlignment = Alignment.CenterVertically) { Checkbox(plain, { plain = it }); Text("Sin cifrar (http)", fontSize = 13.sp) }
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, singleLine = true, label = { Text("Puerto (opcional)") })
             if (proto == Protocol.WEBDAV) OutlinedTextField(base, { base = it }, singleLine = true, label = { Text("Ruta base, p. ej. /remote.php/dav") })
+            if (proto == Protocol.FTPS) Row(Modifier.clickable { base = if (base == RemoteFactory.TLS12) "" else RemoteFactory.TLS12 }, verticalAlignment = Alignment.CenterVertically) { Checkbox(base == RemoteFactory.TLS12, { base = if (it) RemoteFactory.TLS12 else "" }); Text("Solo TLS 1.2 (si el servidor exige reutilizar la sesión)", fontSize = 13.sp) }
             if (proto == Protocol.SMB) OutlinedTextField(base, { base = it }, singleLine = true, label = { Text("Recurso compartido") })
             if (proto == Protocol.SMB) OutlinedTextField(domain, { domain = it }, singleLine = true, label = { Text("Dominio (opcional)") })
             OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Usuario") })
@@ -195,6 +196,6 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
             }
             Text("Contraseña, clave y frase de paso se guardan cifradas con Android Keystore.", color = C.dim, fontSize = 12.sp)
         } },
-        confirmButton = { TextButton(enabled = valid, onClick = { onSave(name, proto, if (proto == Protocol.WEBDAV && plain) "http://${host.trim()}" else host.trim(), portN ?: 0, user, if (proto == Protocol.WEBDAV || proto == Protocol.SMB) base else "", pw, if (proto == Protocol.SMB) domain else "", if (proto == Protocol.SFTP) key else "", pass) }) { Text("Guardar") } },
+        confirmButton = { TextButton(enabled = valid, onClick = { onSave(name, proto, if (proto == Protocol.WEBDAV && plain) "http://${host.trim()}" else host.trim(), portN ?: 0, user, if (proto == Protocol.WEBDAV || proto == Protocol.SMB || proto == Protocol.FTPS) base else "", pw, if (proto == Protocol.SMB) domain else "", if (proto == Protocol.SFTP) key else "", pass) }) { Text("Guardar") } },
         dismissButton = { Row { if (p != null) TextButton(onClick = onDelete) { Text("Borrar", color = C.danger) }; TextButton(onClick = onClose) { Text("Cancelar") } } })
 }

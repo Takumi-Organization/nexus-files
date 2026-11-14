@@ -2,6 +2,40 @@
 
 Kotlin + Compose. `:core` (Kotlin puro, probado con JUnit: nombres, listado, copiar/mover/borrar) y `:app` (UI).
 
+## Interfaz y fluidez (rediseño 2026-11-14)
+
+Rediseño completo con dirección visual propia: tipografía **Inter** para texto y **JetBrains Mono** para rutas y
+huellas (ambas OFL; licencias en `docs/`), neutros con matiz azul-tinta en lugar de grises puros, seis acentos
+(**Brasa** por defecto), iconografía de trazo dibujada con `Canvas` y un color por tipo de archivo.
+
+- **Pantallas**: Inicio con tarjeta de almacenamiento (cifra que rueda), barra segmentada por tipo y bento de
+  categorías; explorador con título grande, migas tipográficas, selección en cápsula y raíl de acciones; analizador
+  con anillo por tipo, listas y treemap navegable; remoto con estado de conexión, tarjetas por protocolo y
+  transferencias con velocidad; ajustes en hoja arrastrable. Barra de pestañas flotante, transición contenedor→visor,
+  diálogos con muelle y cierre por arrastre.
+- **Temas**: Sistema, Claro, Oscuro y AMOLED. Objetivos táctiles mínimos de 40 dp (54 dp en acciones principales).
+- **Movimiento**: muelles contenidos; se desactivan con «Reducir animaciones» del sistema o con el interruptor propio.
+  La respuesta háptica también se puede apagar.
+- **Capturas**: `docs/capturas/` (claro, oscuro, AMOLED, cuadrícula, selección, analizador, remoto y ajustes).
+
+### Fluidez con miles de archivos
+
+Carpeta de prueba con **3.000 archivos** en el emulador (Android 16, 1080×2424), 12 gestos de desplazamiento por
+pasada y `dumpsys gfxinfo`:
+
+| Versión | p50 | p90 | p99 | Fotogramas con jank |
+|---|---|---|---|---|
+| Antes de la pasada de rendimiento | 34–36 ms | — | — | 8–12 % |
+| Actual | 16–27 ms | 18–31 ms | 29–44 ms | 1,6–2,8 % |
+
+Cambios que explican la mejora: las filas no animan su entrada ni crean una capa (`graphicsLayer`) por elemento; el
+realce de pulsación se reserva a botones; el halo ambiental se rasteriza a un tercio de resolución y no se dibuja bajo
+listas largas; el rectángulo de origen de la transición se guarda sin estado para no recomponer en cada fotograma de
+scroll; lista y cuadrícula usan claves estables por ruta.
+
+**Límite**: son cifras de emulador; en un dispositivo físico no se han medido y la aprobación estética final queda
+pendiente de revisión humana.
+
 ## Estado (fases 1 a 5)
 Hecho y verificado: explorador (raíces interna/SD, breadcrumbs, lista/cuadrícula, orden, ocultos, selección múltiple con háptico,
 copiar/cortar/pegar, mover, renombrar, borrar con confirmación, nueva carpeta, compartir vía FileProvider, abrir con app externa,

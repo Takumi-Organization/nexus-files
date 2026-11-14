@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -63,27 +64,36 @@ object Viewers {
 @Composable
 fun ViewerScreen(entry: Entry, kind: VKind, onClose: () -> Unit, onExternal: () -> Unit, onExtract: (File, Set<String>?) -> Unit) {
     BackHandler(onBack = onClose)
-    Surface(Modifier.fillMaxSize(), color = C.bg, contentColor = C.text) {
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onClose) { Text("←") }
-            Column(Modifier.weight(1f)) {
-                Text(entry.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(humanSize(entry.size), color = C.dim, fontSize = 11.sp)
+    val tint = C.kind(entry.kind)
+    ContainerTransform {
+        DragDismiss(onClose) {
+            Box(Modifier.fillMaxSize().background(C.bg)) {
+                AmbientGlow(color = tint, second = tint, strength = 0.9f)
+                Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(androidx.compose.foundation.shape.CircleShape).background(C.surface3).nxClick(onClose), Alignment.Center) { Text("✕", style = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = C.text, fontWeight = FontWeight.Bold)) }
+                        Spacer(Modifier.width(12.dp))
+                        FileTag(entry, 40.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(entry.name, style = T.name(20), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${entry.extension.uppercase().ifEmpty { "Archivo" }} · ${humanSize(entry.size)}", style = T.label(12))
+                        }
+                        NxBtn("Abrir con…", onExternal, kind = BtnKind.GHOST, small = true)
+                    }
+                    Box(Modifier.weight(1f).fillMaxWidth().navigationBarsPadding()) {
+                        when (kind) {
+                            VKind.IMAGE -> ImageView(entry.file)
+                            VKind.TEXT, VKind.JSON, VKind.XML -> TextView(entry.file, kind, onExternal)
+                            VKind.PDF -> PdfView(entry.file)
+                            VKind.AUDIO -> AudioView(entry.file)
+                            VKind.VIDEO -> VideoPlayer(entry.file)
+                            VKind.ZIP -> ZipView(entry.file, onExtract)
+                        }
+                    }
+                }
             }
-            TextButton(onClick = onExternal) { Text("Abrir con…") }
         }
-        Box(Modifier.weight(1f).fillMaxWidth().navigationBarsPadding()) {
-            when (kind) {
-                VKind.IMAGE -> ImageView(entry.file)
-                VKind.TEXT, VKind.JSON, VKind.XML -> TextView(entry.file, kind, onExternal)
-                VKind.PDF -> PdfView(entry.file)
-                VKind.AUDIO -> AudioView(entry.file)
-                VKind.VIDEO -> VideoPlayer(entry.file)
-                VKind.ZIP -> ZipView(entry.file, onExtract)
-            }
-        }
-    }
     }
 }
 
@@ -112,7 +122,8 @@ fun ViewerScreen(entry: Entry, kind: VKind, onClose: () -> Unit, onExternal: () 
 private const val MAX_TEXT = 1_000_000
 
 private fun readText(f: File, kind: VKind): Pair<String, String?> {
-    val bytes = f.inputStream().use { it.readNBytes(MAX_TEXT + 1) }
+    // `readNBytes` exige API 33 y el mínimo es 30: lectura acotada equivalente.
+    val bytes = f.inputStream().use { i -> val buf = ByteArray(MAX_TEXT + 1); var off = 0; while (off < buf.size) { val n = i.read(buf, off, buf.size - off); if (n < 0) break; off += n }; if (off == buf.size) buf else buf.copyOf(off) }
     if (bytes.take(8192).any { it == 0.toByte() }) return "" to "Parece un archivo binario"
     val truncated = bytes.size > MAX_TEXT
     var s = String(bytes, 0, minOf(bytes.size, MAX_TEXT), Charsets.UTF_8); var note: String? = if (truncated) "Mostrando solo el primer MB" else null

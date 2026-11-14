@@ -1,29 +1,29 @@
 package dev.nexus.files
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,264 +53,243 @@ fun humanSize(b: Long): String {
 
 @Composable
 fun PermissionGate(onLimited: () -> Unit, onGrant: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(C.bg).padding(32.dp), verticalArrangement = Arrangement.Center) {
-        Text("NEXUS", fontSize = 40.sp, fontWeight = FontWeight.Black, color = C.accent)
-        Spacer(Modifier.height(12.dp))
-        Text("Para gestionar tus archivos, Android necesita que concedas «Acceso a todos los archivos». Es una concesión explícita tuya en Ajustes; NEXUS no la usa para nada más que explorar y operar sobre archivos cuando tú lo pides.", color = C.dim)
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onGrant) { Text("Abrir Ajustes") }
-        Spacer(Modifier.height(12.dp))
-        Text("O, si prefieres no dar acceso total, usa solo las carpetas que elijas tú (selector del sistema) y los servidores remotos. Podrás conceder el acceso total más tarde.", color = C.dim, fontSize = 13.sp)
-        TextButton(onClick = onLimited) { Text("Usar solo carpetas elegidas") }
+    Box(Modifier.fillMaxSize().background(C.bg)) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(28.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Box(Modifier.size(72.dp).shadow(22.dp, Squircle(22.dp), ambientColor = C.accent.copy(alpha = 0.3f), spotColor = C.accent.copy(alpha = 0.6f)).clip(Squircle(22.dp)).background(C.accentBrush), Alignment.Center) { Glyph(Kind.FOLDER, 46.dp, ink = C.onAccent) }
+                Spacer(Modifier.height(36.dp))
+                Text("Acceso a\ntodos tus\narchivos", style = T.title(58), modifier = Modifier.enter(0))
+                Spacer(Modifier.height(16.dp))
+                Text("Android pide una concesión explícita para que un gestor de archivos vea todo el almacenamiento. NEXUS solo la usa cuando tú lo pides.", style = TextStyle(fontFamily = Fonts.display, fontSize = 16.sp, color = C.dim, lineHeight = 23.sp), modifier = Modifier.enter(1))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                NxBtn("Abrir Ajustes de Android", onGrant, Modifier.fillMaxWidth().enter(2))
+                NxBtn("Usar solo carpetas elegidas", onLimited, Modifier.fillMaxWidth().enter(3), kind = BtnKind.GHOST)
+                Text("Sin acceso total puedes trabajar con las carpetas que elijas y con servidores remotos. Podrás concederlo más tarde.", style = TextStyle(fontFamily = Fonts.display, fontSize = 13.sp, color = C.dim), modifier = Modifier.padding(horizontal = 6.dp))
+            }
+        }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ExplorerScreen(onSettings: () -> Unit, onShare: (List<File>) -> Unit, onOpenExternal: (File) -> Boolean, onView: (Entry) -> Unit, vm: ExplorerViewModel = viewModel(), home: HomeViewModel = viewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val lib by home.lib.collectAsStateWithLifecycle()
-    val haptic = LocalHapticFeedback.current
-    val snack = remember { SnackbarHostState() }
+    val h = rememberHaptics()
     var dlg by remember { mutableStateOf<Dlg?>(null) }
+    var toast by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { vm.start() }
-    LaunchedEffect(s.message) { s.message?.let { snack.showSnackbar(it); vm.consumeMessage() } }
+    LaunchedEffect(s.message) { s.message?.let { toast = it; vm.consumeMessage(); kotlinx.coroutines.delay(3200); toast = null } }
     BackHandler(enabled = s.selection.isNotEmpty() || (s.dir != null && s.roots.none { it.dir == s.dir })) { vm.up() }
 
     val list = remember(s.entries, s.sort, s.showHidden) { vm.visible }
     val selected = list.filter { it.path in s.selection }
+    val selecting = s.selection.isNotEmpty()
 
     fun click(e: Entry) {
-        if (s.selection.isNotEmpty()) { vm.toggle(e.path); return }
+        if (selecting) { h.tick(); vm.toggle(e.path); return }
         if (e.isDir) vm.open(e.file) else onView(e)
     }
-    fun long(e: Entry) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); vm.toggle(e.path) }
+    fun long(e: Entry) { vm.toggle(e.path) }
 
-    Scaffold(
-        containerColor = C.bg,
-        snackbarHost = { SnackbarHost(snack) },
-        topBar = {
-            if (s.selection.isEmpty()) TopBar(s, vm, onSettings) { dlg = Dlg.Sort }
-            else SelectionBar(selected.size, onClose = vm::clearSelection, onAll = vm::selectAll,
-                onCopy = { vm.copyToClip(false) }, onCut = { vm.copyToClip(true) },
-                onShare = { onShare(selected.map { it.file }) },
-                onRename = if (selected.size == 1) ({ dlg = Dlg.Rename(selected[0]) }) else null,
-                onDelete = { dlg = Dlg.Delete(s.selection, selected.map { it.name }) },
-                onInfo = if (selected.size == 1) ({ dlg = Dlg.Info(selected[0]) }) else null,
-                onFav = { home.toggleFavorite(s.selection); vm.clearSelection() }, onZip = { dlg = Dlg.Zip(s.selection, (selected.singleOrNull()?.name?.substringBeforeLast('.') ?: s.dir?.name ?: "archivo") + ".zip") }, onTags = { dlg = Dlg.Tags(s.selection.toList()) })
-        },
-        floatingActionButton = { if (s.selection.isEmpty() && s.clip == null) FloatingActionButton(onClick = { dlg = Dlg.NewFolder }, containerColor = C.accent, contentColor = Color.Black) { Text("+", fontSize = 28.sp) } },
-        bottomBar = { BottomPanel(s, vm) },
-    ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize()) {
-            Breadcrumbs(s, vm)
-            when {
-                s.loading -> Skeleton()
-                s.error != null -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No se puede mostrar esta carpeta", fontWeight = FontWeight.Bold); Spacer(Modifier.height(6.dp))
-                        Text(s.error ?: "", color = C.dim); Spacer(Modifier.height(12.dp)); OutlinedButton(onClick = vm::reload) { Text("Reintentar") }
-                    }
-                }
-                list.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Carpeta vacía", color = C.dim) }
-                s.grid -> LazyVerticalGrid(GridCells.Adaptive(104.dp), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(list, key = { it.path }) { e -> GridCell(e, e.path in s.selection, { click(e) }, { long(e) }) }
-                }
-                else -> LazyColumn { items(list, key = { it.path }) { e -> EntryRow(e, e.path in s.selection, { click(e) }, { long(e) }, star = e.path in lib.favorites) } }
+    SideEffect { Nx.hideNav = selecting }
+    DisposableEffect(Unit) { onDispose { Nx.hideNav = false } }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            AnimatedContent(selecting, transitionSpec = { fadeIn(tween(140)) togetherWith fadeOut(tween(90)) }, label = "hdr") { sel ->
+                if (!sel) Header(s, vm, list.size, onSettings, { dlg = Dlg.Sort }, { dlg = Dlg.NewFolder })
+                else SelectionHeader(selected.size, vm::clearSelection, vm::selectAll)
             }
+            val depth = s.dir?.path?.count { it == '/' } ?: 0
+            var lastDepth by remember { mutableIntStateOf(depth) }
+            val slide = remember { Animatable(1f) }
+            var dirSign by remember { mutableIntStateOf(1) }
+            val reduceNav = rememberReduceMotion()
+            LaunchedEffect(s.dir?.path) {
+                dirSign = if (depth >= lastDepth) 1 else -1; lastDepth = depth
+                if (!reduceNav) { slide.snapTo(0f); slide.animateTo(1f, spring(0.82f, 420f)) }
+            }
+            Box(Modifier.weight(1f).graphicsLayer { translationX = dirSign * (1f - slide.value) * 56.dp.toPx(); alpha = 0.25f + 0.75f * slide.value }) {
+                when {
+                    s.loading -> Skeleton()
+                    s.error != null -> NxEmpty(Kind.FOLDER, "Sin acceso", s.error ?: "No se puede leer la carpeta.", danger = true) { NxBtn("Reintentar", vm::reload) }
+                    list.isEmpty() -> NxEmpty(Kind.FOLDER, "Vacía", "Esta carpeta no contiene nada${if (!s.showHidden) " visible" else ""}.") { NxBtn("Nueva carpeta", { dlg = Dlg.NewFolder }, kind = BtnKind.GHOST, small = true) }
+                    s.grid -> LazyVerticalGrid(GridCells.Adaptive(112.dp), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 120.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        itemsIndexed(list, key = { _, e -> e.path }) { i, e -> GridCell(e, e.path in s.selection, { click(e) }, { long(e) }, i, Modifier.animateItem(fadeInSpec = null)) }
+                    }
+                    else -> LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) { items(list, key = { e -> e.path }) { e -> EntryRow(e, e.path in s.selection, { click(e) }, { long(e) }, star = e.path in lib.favorites) } }
+                }
+            }
+            BottomPanel(s, vm)
+            AnimatedVisibility(selecting, enter = slideInVertically(spring(0.8f, 420f)) { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+                ActionRail(selected.size, onCopy = { vm.copyToClip(false) }, onCut = { vm.copyToClip(true) },
+                    onShare = { onShare(selected.map { it.file }) }, onRename = if (selected.size == 1) ({ dlg = Dlg.Rename(selected[0]) }) else null,
+                    onDelete = { dlg = Dlg.Delete(s.selection, selected.map { it.name }) }, onInfo = if (selected.size == 1) ({ dlg = Dlg.Info(selected[0]) }) else null,
+                    onFav = { home.toggleFavorite(s.selection); vm.clearSelection() },
+                    onZip = { dlg = Dlg.Zip(s.selection, (selected.singleOrNull()?.name?.substringBeforeLast('.') ?: s.dir?.name ?: "archivo") + ".zip") }, onTags = { dlg = Dlg.Tags(s.selection.toList()) })
+            }
+        }
+        AnimatedVisibility(toast != null, Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp, start = 16.dp, end = 16.dp), enter = slideInVertically(spring(0.7f, 400f)) { it } + fadeIn(), exit = fadeOut()) {
+            Box(Modifier.clip(Chamfer(10.dp)).background(C.text).padding(horizontal = 16.dp, vertical = 12.dp)) { Text(toast.orEmpty(), style = T.mono(12, C.bg)) }
         }
     }
 
     when (val d = dlg) {
-        Dlg.NewFolder -> NameDialog("Nueva carpeta", "", "Crear", { dlg = null }) { vm.mkdir(it); dlg = null }
-        is Dlg.Rename -> NameDialog("Renombrar", d.e.name, "Renombrar", { dlg = null }) { vm.rename(d.e.path, it) { from, to -> home.moved(from, to) }; dlg = null }
-        is Dlg.Delete -> AlertDialog(
-            onDismissRequest = { dlg = null }, title = { Text("¿Eliminar ${d.paths.size} elemento(s)?") },
-            text = { Text(d.names.take(6).joinToString("\n") + (if (d.names.size > 6) "\n… y ${d.names.size - 6} más" else "") + "\n\nEsta acción no se puede deshacer.") },
-            confirmButton = { TextButton(onClick = { vm.delete(d.paths); dlg = null }) { Text("Eliminar", color = C.danger) } },
-            dismissButton = { TextButton(onClick = { dlg = null }) { Text("Cancelar") } })
+        Dlg.NewFolder -> NxNameDialog("Nueva carpeta", "", "Crear", ::nameError, { dlg = null }) { vm.mkdir(it); dlg = null }
+        is Dlg.Rename -> NxNameDialog("Renombrar", d.e.name, "Renombrar", ::nameError, { dlg = null }) { vm.rename(d.e.path, it) { from, to -> home.moved(from, to) }; dlg = null }
+        is Dlg.Delete -> NxConfirm("¿Eliminar ${d.paths.size}?", d.names.take(6).joinToString("\n") + (if (d.names.size > 6) "\n… y ${d.names.size - 6} más" else "") + "\n\nPermanente: no hay papelera.", "Eliminar", true, { dlg = null }) { vm.delete(d.paths); h.confirm(); dlg = null }
         Dlg.Sort -> SortDialog(s, vm) { dlg = null }
-        is Dlg.Zip -> NameDialog("Comprimir en ZIP", d.suggested, "Comprimir", { dlg = null }) { vm.compress(d.paths, it); dlg = null }
+        is Dlg.Zip -> NxNameDialog("Comprimir en ZIP", d.suggested, "Comprimir", ::nameError, { dlg = null }) { vm.compress(d.paths, it); dlg = null }
         is Dlg.Tags -> TagsDialog(d.paths, lib, home) { dlg = null }
         is Dlg.Info -> DetailsDialog(d.e) { dlg = null }
         null -> {}
     }
 }
 
-@Composable private fun TopBar(s: UiState, vm: ExplorerViewModel, onSettings: () -> Unit, onSort: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("NEXUS", fontWeight = FontWeight.Black, fontSize = 22.sp, color = C.accent, modifier = Modifier.weight(1f))
-        TextButton(onClick = { vm.setGrid(!s.grid) }) { Text(if (s.grid) "Lista" else "Cuadrícula") }
-        TextButton(onClick = onSort) { Text("Ordenar") }
-        Box {
-            TextButton(onClick = { menu = true }) { Text("⋮", fontSize = 20.sp) }
-            DropdownMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text(if (s.showHidden) "Ocultar archivos ocultos" else "Mostrar archivos ocultos") }, onClick = { vm.setHidden(!s.showHidden); menu = false })
-                DropdownMenuItem(text = { Text("Actualizar") }, onClick = { vm.reload(); menu = false })
-                DropdownMenuItem(text = { Text("Ajustes") }, onClick = { onSettings(); menu = false })
-            }
-        }
-    }
-}
+private fun nameError(v: String): String? = (Names.validate(v) as? Names.Result.Invalid)?.reason
 
-@Composable private fun SelectionBar(n: Int, onClose: () -> Unit, onAll: () -> Unit, onCopy: () -> Unit, onCut: () -> Unit, onShare: () -> Unit, onRename: (() -> Unit)?, onDelete: () -> Unit, onInfo: (() -> Unit)?, onFav: () -> Unit, onTags: () -> Unit, onZip: () -> Unit) {
-    Column(Modifier.fillMaxWidth().background(C.surface2).statusBarsPadding()) {
-        Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onClose) { Text("✕") }
-            Text("$n seleccionado(s)", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            TextButton(onClick = onAll) { Text("Todo") }
-        }
-        LazyRow(contentPadding = PaddingValues(horizontal = 8.dp)) {
-            item { TextButton(onClick = onCopy) { Text("Copiar") } }
-            item { TextButton(onClick = onCut) { Text("Cortar") } }
-            item { TextButton(onClick = onFav) { Text("★ Favorito") } }
-            item { TextButton(onClick = onTags) { Text("Etiquetas") } }
-            item { TextButton(onClick = onZip) { Text("Comprimir") } }
-            item { TextButton(onClick = onShare) { Text("Compartir") } }
-            onRename?.let { item { TextButton(onClick = it) { Text("Renombrar") } } }
-            onInfo?.let { item { TextButton(onClick = it) { Text("Detalles") } } }
-            item { TextButton(onClick = onDelete) { Text("Eliminar", color = C.danger) } }
-        }
-    }
-}
-
-@Composable private fun Breadcrumbs(s: UiState, vm: ExplorerViewModel) {
-    val dir = s.dir ?: return
-    val root = s.roots.firstOrNull { dir.path.startsWith(it.dir.path) } ?: return
+/** Cabecera: ruta como migas tipográficas y el nombre de la carpeta en tamaño enorme. */
+@Composable private fun Header(s: UiState, vm: ExplorerViewModel, count: Int, onSettings: () -> Unit, onSort: () -> Unit, onNew: () -> Unit) {
+    val dir = s.dir
+    val root = dir?.let { d -> s.roots.firstOrNull { d.path.startsWith(it.dir.path) } }
     val parts = buildList {
-        add(root.label to root.dir)
-        var cur = root.dir
-        dir.path.removePrefix(root.dir.path).split('/').filter { it.isNotEmpty() }.forEach { cur = File(cur, it); add(it to cur) }
+        if (root != null && dir != null) {
+            add(root.label.replace("Almacenamiento ", "").replaceFirstChar { it.uppercase() } to root.dir)
+            var cur = root.dir
+            dir.path.removePrefix(root.dir.path).split('/').filter { it.isNotEmpty() }.forEach { cur = File(cur, it); add(it to cur) }
+        }
     }
-    Column {
-        if (s.roots.size > 1) LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(s.roots) { r -> FilterChip(selected = r == root, onClick = { vm.open(r.dir) }, label = { Text(r.label) }) }
+    Column(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 10.dp)) {
+        if (s.roots.size > 1) LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(s.roots) { r -> NxChip(r.label, r == root, { vm.open(r.dir) }) }
         }
         val st = rememberLazyListState()
-        LaunchedEffect(parts.size) { st.animateScrollToItem(parts.lastIndex) }
-        LazyRow(state = st, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        LaunchedEffect(parts.size) { if (parts.isNotEmpty()) st.animateScrollToItem(parts.lastIndex) }
+        LazyRow(state = st, contentPadding = PaddingValues(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             items(parts.size) { i ->
-                val (label, f) = parts[i]
-                Text(label, color = if (i == parts.lastIndex) C.text else C.dim, fontWeight = if (i == parts.lastIndex) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { vm.open(f) }.padding(horizontal = 6.dp, vertical = 6.dp))
-                if (i < parts.lastIndex) Text("›", color = C.dim)
+                val (label, f) = parts[i]; val last = i == parts.lastIndex
+                Text(label, style = TextStyle(fontFamily = Fonts.display, fontWeight = if (last) FontWeight.SemiBold else FontWeight.Medium, fontSize = 14.sp, color = if (last) C.accent else C.dim), modifier = Modifier.clip(CircleShape).clickable { vm.open(f) }.padding(horizontal = 8.dp, vertical = 10.dp))
+                if (!last) Text("›", style = TextStyle(fontSize = 16.sp, color = C.faint))
             }
+        }
+        AnimatedContent(parts.lastOrNull()?.first ?: "—", transitionSpec = { (slideInVertically(spring(0.85f, 380f)) { it / 2 } + fadeIn(tween(160))) togetherWith (slideOutVertically(tween(140)) { -it / 3 } + fadeOut(tween(100))) }, label = "title") { t ->
+            Text(if (parts.size <= 1) "Archivos" else t, style = T.title(56), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 24.dp))
+        }
+        Text("$count elementos${if (s.showHidden) " · con ocultos" else ""}", style = TextStyle(fontFamily = Fonts.display, fontSize = 14.sp, color = C.dim), modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { NxChip(if (s.grid) "Lista" else "Cuadrícula", false, { vm.setGrid(!s.grid) }) }
+            item { NxChip("Orden · ${when (s.sort.by) { SortBy.NAME -> "nombre"; SortBy.SIZE -> "tamaño"; SortBy.DATE -> "fecha"; SortBy.TYPE -> "tipo" }}${if (s.sort.descending) " ↓" else " ↑"}", false, onSort) }
+            item { NxChip("+ Carpeta", false, onNew) }
+            item { NxChip("Ocultos", s.showHidden, { vm.setHidden(!s.showHidden) }) }
+            item { NxChip("Actualizar", false, { vm.reload() }) }
+            item { NxChip("Ajustes", false, onSettings) }
+        }
+    }
+}
+
+/** Cabecera de selección: contador que rueda sobre un fondo de acento con degradado tonal. */
+@Composable private fun SelectionHeader(n: Int, onClose: () -> Unit, onAll: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(C.accentBrush).statusBarsPadding().padding(start = 24.dp, end = 14.dp, top = 12.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        RollingText("$n", T.numeral(84, C.onAccent))
+        Spacer(Modifier.width(12.dp))
+        Text(if (n == 1) "elemento\nseleccionado" else "elementos\nseleccionados", style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.Medium, fontSize = 15.sp, color = C.onAccent.copy(alpha = 0.9f), lineHeight = 18.sp), modifier = Modifier.weight(1f))
+        NxBtn("Todo", onAll, kind = BtnKind.INK, small = true); Spacer(Modifier.width(8.dp)); NxBtn("Listo", onClose, kind = BtnKind.INK, small = true)
+    }
+}
+
+/** Raíl de acciones contextual: flota sobre el contenido con sombra y esquinas continuas. */
+@Composable private fun ActionRail(n: Int, onCopy: () -> Unit, onCut: () -> Unit, onShare: () -> Unit, onRename: (() -> Unit)?, onDelete: () -> Unit, onInfo: (() -> Unit)?, onFav: () -> Unit, onZip: () -> Unit, onTags: () -> Unit) {
+    Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp).padding(bottom = 8.dp).shadow(24.dp, Squircle(26.dp), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.45f)).clip(Squircle(26.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(26.dp))) {
+        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { NxBtn("Copiar", onCopy, kind = BtnKind.PRIMARY, small = true) }
+            item { NxBtn("Cortar", onCut, kind = BtnKind.GHOST, small = true) }
+            item { NxBtn("Comprimir", onZip, kind = BtnKind.GHOST, small = true) }
+            item { NxBtn("Compartir", onShare, kind = BtnKind.GHOST, small = true) }
+            item { NxBtn("★ Favorito", onFav, kind = BtnKind.GHOST, small = true) }
+            item { NxBtn("Etiquetas", onTags, kind = BtnKind.GHOST, small = true) }
+            onRename?.let { item { NxBtn("Renombrar", it, kind = BtnKind.GHOST, small = true) } }
+            onInfo?.let { item { NxBtn("Detalles", it, kind = BtnKind.GHOST, small = true) } }
+            item { NxBtn("Eliminar", onDelete, kind = BtnKind.DANGER, small = true) }
         }
     }
 }
 
 @Composable private fun BottomPanel(s: UiState, vm: ExplorerViewModel) {
-    Column {
+    Column(Modifier.padding(bottom = if (Nx.hideNav) 0.dp else 90.dp)) {
         s.op?.let { op ->
-            Column(Modifier.fillMaxWidth().background(C.surface2).padding(12.dp)) {
+            val speed = rememberSpeed(op.progress?.doneBytes ?: 0L)
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).shadow(20.dp, Squircle(24.dp), ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.4f)).clip(Squircle(24.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(24.dp)).padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(op.title, fontWeight = FontWeight.Bold)
-                        Text(op.progress?.let { "${it.current} · ${humanSize(it.doneBytes)} / ${humanSize(it.totalBytes)}" } ?: "Preparando…", color = C.dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(op.title, style = T.label(12, C.accent))
+                        Text(op.progress?.current ?: "Preparando…", style = T.name(20), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    TextButton(onClick = vm::cancelOp) { Text("Cancelar") }
+                    val (n, u) = sizeParts(speed.toLong())
+                    Column(horizontalAlignment = Alignment.End) { RollingText(n, T.numeral(48)); Text("$u/s", style = T.label(12)) }
                 }
-                Spacer(Modifier.height(6.dp))
-                val f = op.progress?.fraction
-                if (f == null) LinearProgressIndicator(Modifier.fillMaxWidth()) else LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                NxProgress(op.progress?.fraction?.takeIf { (op.progress?.totalBytes ?: 0) > 0 || (op.progress?.totalItems ?: 0) > 0 })
+                Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(op.progress?.let { "${humanSize(it.doneBytes)} de ${humanSize(it.totalBytes)}" } ?: "", style = TextStyle(fontFamily = Fonts.display, fontSize = 13.sp, color = C.dim), modifier = Modifier.weight(1f))
+                    NxBtn("Parar", vm::cancelOp, kind = BtnKind.GHOST, small = true)
+                }
             }
         }
         s.clip?.let { c ->
-            if (s.op == null) Row(Modifier.fillMaxWidth().background(C.surface2).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${c.paths.size} para ${if (c.cut) "mover" else "copiar"}", modifier = Modifier.weight(1f))
-                TextButton(onClick = vm::clearClip) { Text("Descartar") }
-                Button(onClick = vm::paste) { Text("Pegar aquí") }
+            if (s.op == null) Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth().shadow(20.dp, Squircle(24.dp), ambientColor = C.accent.copy(alpha = 0.2f), spotColor = C.accent.copy(alpha = 0.45f)).clip(Squircle(24.dp)).background(C.accentBrush).padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                RollingText("${c.paths.size}", T.numeral(44, C.onAccent)); Spacer(Modifier.width(10.dp))
+                Text("para ${if (c.cut) "mover" else "copiar"}", style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.Medium, fontSize = 15.sp, color = C.onAccent), modifier = Modifier.weight(1f))
+                NxBtn("Descartar", vm::clearClip, kind = BtnKind.INK, small = true); Spacer(Modifier.width(8.dp)); NxBtn("Pegar aquí", vm::paste, kind = BtnKind.INK, small = true)
             }
         }
     }
 }
 
-@Composable internal fun Badge(e: Entry, size: Int) {
-    val c = C.kind(e.kind)
-    Box(Modifier.size(size.dp).clip(RoundedCornerShape(10.dp)).background(c.copy(alpha = 0.18f)), Alignment.Center) {
-        Text(if (e.isDir) "▤" else e.extension.take(4).uppercase().ifEmpty { "·" }, color = c, fontWeight = FontWeight.Bold, fontSize = if (e.isDir) (size * 0.45f).sp else (size * 0.26f).sp, maxLines = 1)
+/** Velocidad instantánea (bytes/s) a partir de los bytes acumulados, suavizada. */
+@Composable fun rememberSpeed(bytes: Long): Float {
+    var last by remember { mutableStateOf(bytes to System.nanoTime()) }
+    var speed by remember { mutableStateOf(0f) }
+    LaunchedEffect(bytes) {
+        val now = System.nanoTime(); val dt = (now - last.second) / 1e9f
+        if (dt > 0.15f && bytes >= last.first) { val inst = (bytes - last.first) / dt; speed = if (speed == 0f) inst else speed * 0.6f + inst * 0.4f; last = bytes to now }
     }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable fun EntryRow(e: Entry, sel: Boolean, onClick: () -> Unit, onLong: () -> Unit, star: Boolean = false) {
-    Row(Modifier.fillMaxWidth().background(if (sel) C.accent.copy(alpha = 0.16f) else Color.Transparent)
-        .combinedClickable(onClick = onClick, onLongClick = onLong).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Badge(e, 44); Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(e.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (e.hidden) C.dim else C.text)
-            Text(if (e.isDir) DateFormat.getDateInstance().format(Date(e.modified)) else "${humanSize(e.size)} · ${DateFormat.getDateInstance().format(Date(e.modified))}", color = C.dim, fontSize = 12.sp)
-        }
-        if (star) Text("★", color = C.accent, modifier = Modifier.padding(horizontal = 6.dp))
-        if (sel) Text("✓", color = C.accent, fontWeight = FontWeight.Bold)
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable private fun GridCell(e: Entry, sel: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
-    Column(Modifier.clip(RoundedCornerShape(12.dp)).background(if (sel) C.accent.copy(alpha = 0.22f) else C.surface)
-        .combinedClickable(onClick = onClick, onLongClick = onLong).padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Badge(e, 56); Spacer(Modifier.height(6.dp))
-        Text(e.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
-    }
+    return speed
 }
 
 @Composable private fun Skeleton() {
+    val reduce = rememberReduceMotion()
     val t = rememberInfiniteTransition(label = "sk")
-    val a by t.animateFloat(0.25f, 0.6f, infiniteRepeatable(androidx.compose.animation.core.tween(800), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
-    Column(Modifier.padding(16.dp)) {
+    val a by t.animateFloat(0.4f, 1f, infiniteRepeatable(tween(750, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "a")
+    val alpha = if (reduce) 0.7f else a
+    Column(Modifier.padding(horizontal = 22.dp, vertical = 12.dp)) {
         repeat(8) {
-            Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(C.surface2.copy(alpha = a)))
+            Row(Modifier.padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(46.dp).clip(Squircle(14.dp)).background(C.surface3.copy(alpha = alpha)))
                 Spacer(Modifier.width(14.dp))
-                Column { Box(Modifier.width(180.dp).height(12.dp).background(C.surface2.copy(alpha = a))); Spacer(Modifier.height(8.dp)); Box(Modifier.width(100.dp).height(10.dp).background(C.surface2.copy(alpha = a))) }
+                Column { Box(Modifier.width((130 + it * 17 % 90).dp).height(14.dp).clip(CircleShape).background(C.surface3.copy(alpha = alpha))); Spacer(Modifier.height(8.dp)); Box(Modifier.width(90.dp).height(10.dp).clip(CircleShape).background(C.surface3.copy(alpha = alpha))) }
             }
         }
     }
 }
 
-@Composable private fun NameDialog(title: String, initial: String, ok: String, onDismiss: () -> Unit, onOk: (String) -> Unit) {
-    var v by remember { mutableStateOf(initial) }
-    val check = Names.validate(v)
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) },
-        text = { OutlinedTextField(v, { v = it }, singleLine = true, isError = check is Names.Result.Invalid, supportingText = { (check as? Names.Result.Invalid)?.let { Text(it.reason) } }) },
-        confirmButton = { TextButton(enabled = check is Names.Result.Ok, onClick = { onOk(v) }) { Text(ok) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
-}
-
-@Composable private fun SortDialog(s: UiState, vm: ExplorerViewModel, onClose: () -> Unit) {
-    AlertDialog(onDismissRequest = onClose, confirmButton = { TextButton(onClick = onClose) { Text("Cerrar") } }, title = { Text("Ordenar por") },
-        text = {
-            Column {
-                listOf(SortBy.NAME to "Nombre", SortBy.SIZE to "Tamaño", SortBy.DATE to "Fecha", SortBy.TYPE to "Tipo").forEach { (by, label) ->
-                    Row(Modifier.fillMaxWidth().clickable { vm.setSort(s.sort.copy(by = by)) }, verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(s.sort.by == by, { vm.setSort(s.sort.copy(by = by)) }); Text(label)
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(s.sort.descending, { vm.setSort(s.sort.copy(descending = it)) }); Text("Descendente") }
-            }
-        })
-}
+@Composable private fun SortDialog(s: UiState, vm: ExplorerViewModel, onClose: () -> Unit) =
+    NxDialog("Ordenar", onClose, { NxBtn("Listo", onClose, small = true) }) {
+        NxSegment(listOf(SortBy.NAME to "Nombre", SortBy.SIZE to "Tamaño", SortBy.DATE to "Fecha", SortBy.TYPE to "Tipo"), s.sort.by, { vm.setSort(s.sort.copy(by = it)) })
+        Spacer(Modifier.height(8.dp))
+        NxToggle(s.sort.descending, { vm.setSort(s.sort.copy(descending = it)) }, "Descendente")
+        NxToggle(s.sort.foldersFirst, { vm.setSort(s.sort.copy(foldersFirst = it)) }, "Carpetas primero")
+    }
 
 @Composable private fun TagsDialog(paths: List<String>, lib: LibraryData, home: HomeViewModel, onClose: () -> Unit) {
     var v by remember { mutableStateOf("") }
     val common = lib.allTags.filter { t -> paths.all { t in lib.tags[it].orEmpty() } }
-    AlertDialog(onDismissRequest = onClose, title = { Text("Etiquetas (${paths.size})") },
-        confirmButton = { TextButton(onClick = { if (v.isNotBlank()) home.setTags(paths, setOf(v)); onClose() }) { Text(if (v.isBlank()) "Cerrar" else "Añadir") } },
-        text = {
-            Column {
-                OutlinedTextField(v, { v = it }, singleLine = true, label = { Text("Nueva etiqueta") })
-                Spacer(Modifier.height(8.dp))
-                if (lib.allTags.isEmpty()) Text("Aún no hay etiquetas", color = C.dim)
-                lib.allTags.forEach { t ->
-                    val on = t in common
-                    Row(Modifier.fillMaxWidth().clickable { if (on) home.setTags(paths, emptySet(), setOf(t)) else home.setTags(paths, setOf(t)); onClose() }, verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(on, null); Text(t)
-                    }
-                }
-            }
-        })
+    NxDialog("Etiquetas · ${paths.size}", onClose, { NxBtn(if (v.isBlank()) "Cerrar" else "Añadir", { if (v.isNotBlank()) home.setTags(paths, setOf(v)); onClose() }, small = true) }) {
+        NxField(v, { v = it }, "Nueva etiqueta")
+        Spacer(Modifier.height(8.dp))
+        if (lib.allTags.isEmpty()) Text("AÚN NO HAY ETIQUETAS", style = T.label(11))
+        lib.allTags.forEach { t -> val on = t in common; NxToggle(on, { if (on) home.setTags(paths, emptySet(), setOf(t)) else home.setTags(paths, setOf(t)); onClose() }, "# $t") }
+    }
 }
 
 @Composable private fun DetailsDialog(e: Entry, onClose: () -> Unit) {
@@ -328,9 +307,12 @@ fun ExplorerScreen(onSettings: () -> Unit, onShare: (List<File>) -> Unit, onOpen
         }
     }
     val f = e.file
-    AlertDialog(onDismissRequest = onClose, confirmButton = { TextButton(onClick = onClose) { Text("Cerrar") } }, title = { Text(e.name, maxLines = 2) },
-        text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-            Text("Ruta: ${e.path}\nTipo: ${if (e.isDir) "Carpeta" else e.extension.ifEmpty { "archivo" }}\nTamaño: $extra\nModificado: ${DateFormat.getDateTimeInstance().format(Date(e.modified))}\nPermisos: ${if (f.canRead()) "lectura" else "sin lectura"} · ${if (f.canWrite()) "escritura" else "solo lectura"}${if (e.hidden) " · oculto" else ""}")
-            if (!e.isDir) { Spacer(Modifier.height(8.dp)); if (sha == null) TextButton(onClick = { wantHash = true }, enabled = !wantHash) { Text(if (wantHash) "Calculando SHA-256…" else "Calcular SHA-256") } else Text("SHA-256:\n$sha", fontSize = 11.sp) }
-        } })
+    NxDialog(e.name, onClose, { NxBtn("Cerrar", onClose, small = true) }) {
+        Row(verticalAlignment = Alignment.CenterVertically) { FileTag(e, 56.dp); Spacer(Modifier.width(12.dp)); Text(if (e.isDir) "CARPETA" else e.extension.uppercase().ifEmpty { "ARCHIVO" }, style = T.title(36, C.accent)) }
+        Spacer(Modifier.height(10.dp))
+        listOf("Ruta" to e.path, "Tamaño" to extra, "Modificado" to DateFormat.getDateTimeInstance().format(Date(e.modified)), "Permisos" to "${if (f.canRead()) "lectura" else "sin lectura"} · ${if (f.canWrite()) "escritura" else "solo lectura"}${if (e.hidden) " · oculto" else ""}").forEach { (k, v) ->
+            Text(k.uppercase(), style = T.label(10)); Text(v, style = T.mono(13), modifier = Modifier.padding(bottom = 8.dp))
+        }
+        if (!e.isDir) { if (sha == null) NxBtn(if (wantHash) "Calculando SHA-256…" else "Calcular SHA-256", { wantHash = true }, kind = BtnKind.GHOST, small = true, enabled = !wantHash) else { Text("SHA-256", style = T.label(10)); Text(sha!!, style = T.mono(11)) } }
+    }
 }

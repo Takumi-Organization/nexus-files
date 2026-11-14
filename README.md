@@ -28,47 +28,53 @@ no se escribe fuera; comprobado en el emulador). Para probar visores sin tocar l
 `adb shell am start -n dev.nexus.files/.MainActivity --es dev.nexus.files.VIEW_PATH /sdcard/x.json`.
 
 Fase 5: remotos, SAF, transferencias y ajustes.
-- **Protocolos** (todos detrás de `RemoteFs`: listar, descargar atómico `.nexus-part`, subir sin sobrescribir salvo petición, mkdir, borrar, renombrar sin pisar):
+- **Protocolos** (todos detrás de `RemoteFs`: listar, descargar atómico `.nexus-part`, subir sin sobrescribir salvo petición, mkdir, borrar (recursivo), renombrar/mover sin pisar):
   - **FTP** y **FTPS explícito** (`FtpFs`, JDK puro): pasivo EPSV/PASV, MLSD con LIST de reserva, datos siempre contra el host de control.
+    FTPS usa un SSLSocket normal para los datos y, si el servidor rechaza (421/425/426/522 o fallo SSL), pasa a **reutilizar la sesión TLS de control**
+    con un `SSLEngine` cuya caché de sesiones usa el puerto de control (`TlsEngineSocket`), lo que exigen vsftpd & co. (`require_ssl_reuse`). Motivo de que sea
+    un respaldo y no lo normal: `SSLSocket` busca sesiones por el puerto real del servidor (no se puede falsear; test que lo demuestra) y con pyftpdlib +
+    Conscrypt la reanudación en el emulador dio «Failure in SSL library».
   - **WebDAV** (`WebDavFs`) sobre un cliente HTTP/1.1 mínimo propio (`MiniHttp`; `HttpURLConnection` no admite PROPFIND/MKCOL/MOVE). Sin XXE (se rechaza DOCTYPE/ENTITY).
-  - **SFTP** (`SftpFs`) con JSch (fork mwiede 2.28.8) y **SMB2/3** (`SmbFs`) con smbj 0.15.0.
+  - **SFTP** (`SftpFs`, JSch fork mwiede 2.28.8): contraseña o **clave privada** (RSA PEM, OpenSSH ed25519, con o sin frase de paso; se pega o se elige un fichero;
+    la clave y la frase se guardan cifradas con Keystore) y **SMB2/3** (`SmbFs`, smbj 0.15.0) con **dominio** opcional.
   - **TLS** (`Tls`): validación del sistema + nombre de host, o huella SHA-256 fijada (autofirmados). **TOFU**: si el certificado (FTPS/WebDAV https) o la
-    clave de host SSH (SFTP, huella `SHA256:…` como `ssh-keygen -l`) no es confiable se lanza `UntrustedHostException` ANTES de enviar credenciales; la
-    app muestra la huella, y si el usuario acepta la guarda en el perfil. Si cambia después, avisa en rojo («¡La identidad del servidor ha cambiado!»).
-  - **SAF** (`SafFs`, app): carpetas elegidas con el selector de árbol y permiso persistente; modo limitado (sin «acceso a todos los archivos»)
-    desde la pantalla de permisos: solo Remoto + carpetas SAF; descargas a la carpeta propia de la app.
+    clave de host SSH (SFTP, `SHA256:…` como `ssh-keygen -l`) no es confiable se lanza `UntrustedHostException` ANTES de enviar credenciales; la app muestra
+    la huella y, si el usuario acepta, la guarda en el perfil. Si cambia después, avisa en rojo («¡La identidad del servidor ha cambiado!»).
+  - **SAF** (`SafFs`, app): carpetas elegidas con el selector de árbol y permiso persistente; listar, descargar, subir, crear carpeta, renombrar, borrar y
+    **mover entre carpetas** (`moveDocument` nativo, o copia+borrado si el proveedor no lo admite). Modo limitado desde la pantalla de permisos (sin «acceso a
+    todos los archivos»): solo Remoto + carpetas SAF; descargas a la carpeta propia de la app. «Mover a…» está en el menú de cada elemento remoto.
   - Contraseñas: `ProfileStore` + `KeystoreSecretBox` (AES-256-GCM, Android Keystore).
-- **Dependencias nuevas y por qué** (únicas en :core; justificadas porque implementar SSH o SMB a mano no es razonable ni seguro):
-  JSch 2.28.8 (~0,5 MB, sin dependencias, cifrados modernos), smbj 0.15.0 (~0,7 MB) que arrastra bcprov-jdk18on (~8,6 MB sin reducir), asn-one, mbassador y slf4j-api.
-  APK debug resultante: 39,8 MB (sin R8; el release con minificado reduciría BouncyCastle). Probado que arrancan y funcionan en Android (emulador).
-  Limitación conocida de smbj con el servidor impacket: se lee por desplazamientos sin pasar del tamaño del fichero.
-- **Transferencias**: `Transfers` + `TransferService` en primer plano (notificación con «Cancelar»; permiso POST_NOTIFICATIONS pedido una vez) para
-  descargas/subidas remotas Y para copiar, mover, borrar y ZIP locales. **Reintentos** (`RetryingFs`): reconecta y repite la operación ante fallos de red
-  pasajeros, 4 intentos con espera 2-4-8 s (tope 30 s), cancelable; autenticación, permisos, «ya existe» y huellas no confiadas nunca se reintentan.
-  Las descargas interrumpidas se repiten desde el principio (sin reanudar).
+- **Reanudar descargas** interrumpidas: `Range` (WebDAV), `REST` (FTP/FTPS), offset (SFTP con `RESUME`, SMB). El temporal `.nexus-part` se conserva ante fallos de red
+  y se borra ante cancelación o error permanente; si el servidor no admite reanudar o el temporal no encaja, empieza de cero. No hay verificación de que el original no
+  cambiara entre intentos más allá del tamaño final.
+- **Dependencias nuevas y por qué** (solo :core; implementar SSH o SMB a mano no es razonable ni seguro): JSch 2.28.8 (~0,5 MB, sin dependencias), smbj 0.15.0 (~0,7 MB;
+  arrastra bcprov-jdk18on, asn-one, mbassador y slf4j-api). De pruebas: Conscrypt (para reproducir en JVM el proveedor TLS de Android).
+  **Tamaño del APK: debug 41,0 MB; release con R8 y reducción de recursos 10,4 MB** (`app/proguard-rules.pro` mantiene JSch, smbj y BouncyCastle por uso de reflexión).
+  El release firmado con la clave de depuración se instaló y funcionó en el emulador (FTPS, SFTP y SMB).
+- **Transferencias**: `Transfers` + `TransferService` en primer plano (notificación con «Cancelar»; permiso POST_NOTIFICATIONS pedido una vez al arrancar) para
+  descargas/subidas remotas y para copiar, mover, borrar y ZIP locales. **Reintentos** (`RetryingFs`): reconecta y repite la operación ante fallos de red pasajeros,
+  4 intentos con espera 2-4-8 s (tope 30 s), cancelable; autenticación, permisos, «ya existe» y huellas no confiadas no se reintentan.
 - **Ajustes** (⋮ del explorador): ocultos, cuadrícula, orden, carpetas primero, carpeta de descargas.
 - **Verificado**
-  - JVM: 80+ tests en :core. Opt-in (`NEXUS_IT=1`, `NEXUS_FTPS_FP`, `NEXUS_SFTP_FP`, `NEXUS_SMB=1`) contra servidores REALES en el host: wsgidav (WebDAV),
-    pyftpdlib (FTP y FTPS con certificado autofirmado), asyncssh (SFTP con TOFU) e impacket (SMB): crear, subir, no pisar, listar con tildes, renombrar,
-    descargar, borrar. TLS/TOFU probado sin servidor externo con un certificado de `keytool`.
-  - Emulador (emulator-5554, por 10.0.2.2, contra esos servidores reales): alta de conexiones FTP, FTPS, SFTP, SMB y WebDAV desde el formulario;
-    diálogo de huella (coincide con `openssl`/`ssh-keygen`); listar y descargar en todos; descarga de 30 MB por WebDAV con SHA-256 idéntico; cancelar una
-    descarga FTP limitada a 1 MB/s (el `.nexus-part` desaparece); **reintento real**: se mató el servidor FTP a mitad, la pantalla mostró «Reintentando (4/4)…»,
-    se reinició y la descarga de 12 MB terminó con SHA-256 idéntico; subir desde el selector del sistema (SFTP, el fichero llegó al servidor); crear carpeta,
-    renombrar y eliminar (recursivo) por SFTP; notificación del servicio en primer plano (captura del panel con «Descargar grande.bin · 4,1 MB»); pantalla
-    de Ajustes; SAF completo (selector de árbol, concesión, listado, descarga) en modo limitado.
-  - Visores (JSON, XML, código, PNG, PDF, mp3, mp4) y ZIP (con entrada `../`) en el emulador; ver Fase 4.
+  - JVM: 90 tests en :core. Opt-in (`NEXUS_IT=1`, `NEXUS_FTPS_FP`, `NEXUS_SFTP_FP`, `NEXUS_SFTP_KEYDIR`, `NEXUS_SMB=1`) contra servidores REALES en el host: wsgidav (WebDAV), pyftpdlib
+    (FTP y FTPS autofirmado), asyncssh (SFTP con TOFU y claves RSA/ed25519/con frase) e impacket (SMB, con y sin dominio): crear, subir, no pisar, listar con tildes,
+    renombrar, descargar, **reanudar** y borrar. TLS/TOFU sin servidor externo con un certificado de `keytool`; reutilización de sesión TLS y SSLEngine con JDK y con Conscrypt.
+  - Emulador (emulator-5554, por 10.0.2.2, contra esos servidores reales): alta de FTP, FTPS, SFTP (contraseña, clave y clave con frase), SMB (con dominio) y WebDAV desde el
+    formulario; diálogo de huella; listar y descargar en todos; descarga WebDAV de 30 MB con SHA-256 idéntico; cancelar una descarga FTP limitada (sin `.nexus-part`); **reintento real**
+    (servidor FTP matado a mitad: «Reintentando (4/4)…», terminó con SHA-256 idéntico); subir con el selector del sistema; crear carpeta, renombrar y eliminar por SFTP; notificación del
+    servicio; Ajustes; diálogo del permiso de notificaciones («Allow NEXUS to send you notifications?»).
+  - **Operaciones locales en el servicio** (emulador): copiar 1,8 GB (`dumpsys` muestra `isForeground=true`, tipo dataSync; el panel de notificaciones «Copiando · big2.bin · 672 MB»; el
+    resultado en disco idéntico en tamaño), eliminar, comprimir a ZIP (contenido comprobado) y cortar/pegar en otra carpeta.
+  - **SAF** (emulador, modo limitado): selector de árbol, concesión, listar, descargar, crear carpeta, renombrar, mover a otra carpeta, eliminar y subir (contenido comprobado en disco).
+  - Visores (JSON, XML, código, PNG, PDF, mp3, mp4) y ZIP con entrada `../` (Fase 4).
 - **No verificado**
-  - Copiar/mover/borrar/ZIP locales ejecutándose dentro del servicio (comparten el código de `Transfers.start`, comprobado con transferencias remotas, pero no se
-    pulsó «pegar» en pantalla).
-  - Servidores o certificados reales de Internet (solo loopback). FTPS contra servidores que exigen reutilizar la sesión TLS en la conexión de datos
-    (p. ej. vsftpd por defecto) puede fallar: el JDK no la reutiliza entre puertos; pyftpdlib no lo exige.
-  - SFTP con claves privadas (solo contraseña), claves de host solo Ed25519 probadas con asyncssh, SMB con dominio/firmado/cifrado SMB3 obligatorio.
-  - SAF: subir, renombrar, borrar y crear carpeta (código escrito, no ejecutado); mover entre carpetas distintas (no soportado).
-  - `KeystoreSecretBox` fuera del emulador, tamaño del APK release.
-  - El diálogo de permiso de notificaciones (en las pruebas se concedió con `pm grant`).
+  - Servidores o certificados reales de Internet (solo loopback); vsftpd real (no instalable aquí): el respaldo de reutilización de sesión TLS está probado con JDK y Conscrypt en JVM,
+    pero no se ejecutó en el emulador ni contra un servidor que lo exija. La reanudación se probó en JVM contra los cuatro servidores reales, no repetida en el emulador.
+  - SFTP con claves ECDSA/ssh-agent/certificados de usuario, SMB con firmado/cifrado SMB3 obligatorio o Kerberos.
+  - SAF con proveedores distintos del de almacenamiento externo (Drive, etc.) y `moveDocument` nativo (en el emulador no se distingue si movió el proveedor o la copia+borrado).
+  - `KeystoreSecretBox` en un dispositivo físico.
 
-Pendiente solo lo imposible o fuera de alcance: autenticación SFTP por clave privada, reanudar descargas, dominios SMB, y probar contra hardware/servidores reales.
+Límites asumidos: la identidad SFTP/FTPS se fija por huella (no hay autoridades propias), las descargas SAF→local no se reanudan, SMB no admite Kerberos.
 
 ## Probar
 `./gradlew :core:test` · `./gradlew :app:assembleDebug` · permiso: `adb shell appops set dev.nexus.files MANAGE_EXTERNAL_STORAGE allow`

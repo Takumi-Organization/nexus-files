@@ -87,13 +87,22 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
     private var reuseSession = false
 
     internal companion object {
+        private val REUSE_CODES = setOf(421, 425, 426, 522)
         private val REUSE_REJECTED = Regex(""": (421|425|426|522) """)
         fun suggestsSessionReuse(e: Throwable) = e is javax.net.ssl.SSLException && e !is UntrustedHostException || (e is RemoteException && REUSE_REJECTED.containsMatchIn(e.message ?: ""))
     }
 
-    private fun <T> withData(command: String, use: (Socket) -> T): T {
+    /** Lee y descarta las respuestas de control que lleguen en los próximos instantes; devuelve sus códigos. */
+    private fun drainControl(): List<Int> {
+        val codes = ArrayList<Int>(); val old = sock.soTimeout
+        try { sock.soTimeout = 400; while (true) codes += reply().code } catch (_: java.net.SocketTimeoutException) {} catch (_: Exception) {} finally { try { sock.soTimeout = old } catch (_: Exception) {} }
+        return codes
+    }
+
+    private fun <T> withData(command: String, before: () -> Unit = {}, use: (Socket) -> T): T {
         fun attempt(): T {
             openData().use { d ->
+                before()   // p. ej. REST: se repite en cada intento (si se cae al respaldo TLS, el servidor olvida el REST del intento anterior)
                 val start = cmd(command)
                 if (start.code !in listOf(125, 150)) throw RemoteException("$command: ${start.text.lineSequence().first()}")
                 val result = use(d)
@@ -103,7 +112,12 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
             }
         }
         return try { attempt() } catch (e: Exception) {
-            if (tls && !reuseSession && suggestsSessionReuse(e)) { reuseSession = true; attempt() } else throw e
+            if (tls && !reuseSession) {
+                // un servidor que exige reutilizar la sesión suele cerrar los datos y mandar su 522 DESPUÉS del 150: se recogen las respuestas pendientes
+                val late = drainControl()
+                if (suggestsSessionReuse(e) || late.any { it in REUSE_CODES }) { reuseSession = true; return attempt() }
+            }
+            throw e
         }
     }
 
@@ -146,14 +160,15 @@ class FtpFs(private val host: String, private val port: Int = 21, private val us
         val size = cmd("SIZE $p").let { if (it.code == 213) it.text.substringAfter(' ').trim().toLongOrNull() else null }
         atomicWrite(dest) { pf ->
             // REST (RFC 3659) reanuda; si el servidor no lo admite se empieza de cero
-            val from = if (pf.offset > 0 && (size == null || pf.offset <= size) && cmd("REST ${pf.offset}").code == 350) pf.offset else 0L
-            withData("RETR $p") { d ->
+            val canResume = pf.offset > 0 && (size == null || pf.offset <= size)
+            var from = 0L
+            withData("RETR $p", before = { from = if (canResume && cmd("REST ${pf.offset}").code == 350) pf.offset else 0L }) { d ->
                 var total = from
                 pf.open(from).use { o ->
                     val buf = ByteArray(32 * 1024); val i = d.getInputStream()
                     while (true) { val n = i.read(buf); if (n < 0) break; o.write(buf, 0, n); total += n; onProgress(total) }
                 }
-                if (size != null && size != total) throw RemoteException("Descarga incompleta", java.io.EOFException())
+                if (size != null && size != total) throw RemoteException("Descarga incompleta ($total de $size bytes)", java.io.EOFException())
             }
         }
     }

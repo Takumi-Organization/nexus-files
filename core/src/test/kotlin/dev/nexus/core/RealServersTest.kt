@@ -82,4 +82,19 @@ class RealServersTest {
         assertThrows(RemoteException::class.java) { SftpFs("127.0.0.1", 2222, "ana", "", trusted = fp, privateKey = key("rsa_pass"), passphrase = "mala") }
         assertThrows(RemoteException::class.java) { SftpFs("127.0.0.1", 2222, "ana", "", trusted = fp, privateKey = "basura") }
     }
+
+    /** Servidor FTPS que exige reutilizar la sesión TLS de control (ftps_reuse.py, :2992). Debe caer al respaldo con SSLEngine y funcionar, con JDK y con Conscrypt. */
+    @Test fun `FTPS real que exige reutilizar la sesion TLS`() {
+        on(); val fp = System.getenv("NEXUS_FTPS_FP") ?: return; if (System.getenv("NEXUS_FTPS_REUSE") != "1") return
+        FtpFs("127.0.0.1", 2992, "ana", "secreto", tls = true, pinned = fp).use { fs ->
+            val tmp = Files.createTempDirectory("dbg").toFile()
+            val data = ByteArray(300_000) { (it * 13).toByte() }; val src = File(tmp, "g.bin").apply { writeBytes(data) }
+            fs.upload(src, "/dbg.bin"); fs.download("/dbg.bin", File(tmp, "o1.bin")); assertEquals(300_000L, File(tmp, "o1.bin").length())
+            File(tmp, "o2.bin" + FileOps.PART).writeBytes(data.copyOf(120_000))
+            fs.download("/dbg.bin", File(tmp, "o2.bin")); assertEquals(300_000L, File(tmp, "o2.bin").length()); fs.delete("/dbg.bin", false)
+            roundTrip(fs); resume(fs)
+        }
+        Tls.provider = org.conscrypt.Conscrypt.newProvider()
+        try { FtpFs("127.0.0.1", 2992, "ana", "secreto", tls = true, pinned = fp + "").use { roundTrip(it) } } finally { Tls.provider = null }
+    }
 }

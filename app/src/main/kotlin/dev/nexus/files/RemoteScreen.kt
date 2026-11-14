@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -176,7 +177,7 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
     val portN = if (port.isEmpty()) (0) else port.toIntOrNull()
     val valid = name.isNotBlank() && host.isNotBlank() && portN != null && portN in 0..65535 && (proto != Protocol.SMB || base.isNotBlank()) && (p != null || pw.isNotEmpty() || user.isEmpty() || (proto == Protocol.SFTP && key.isNotBlank()))
     AlertDialog(onDismissRequest = onClose, title = { Text(if (p == null) "Nueva conexión" else "Editar conexión") },
-        text = { Column {
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Protocol.entries.forEach { FilterChip(proto == it, { proto = it }, { Text(it.name) }) } }
             OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Nombre") })
             OutlinedTextField(host, { host = it }, singleLine = true, label = { Text("Servidor") })
@@ -184,9 +185,9 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
             OutlinedTextField(port, { port = it.filter(Char::isDigit) }, singleLine = true, label = { Text("Puerto (opcional)") })
             if (proto == Protocol.WEBDAV) OutlinedTextField(base, { base = it }, singleLine = true, label = { Text("Ruta base, p. ej. /remote.php/dav") })
             if (proto == Protocol.SMB) OutlinedTextField(base, { base = it }, singleLine = true, label = { Text("Recurso compartido") })
+            if (proto == Protocol.SMB) OutlinedTextField(domain, { domain = it }, singleLine = true, label = { Text("Dominio (opcional)") })
             OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Usuario") })
             OutlinedTextField(pw, { pw = it }, singleLine = true, visualTransformation = PasswordVisualTransformation(), label = { Text(if (p == null) "Contraseña" else "Contraseña (vacío = conservar)") })
-            if (proto == Protocol.SMB) OutlinedTextField(domain, { domain = it }, singleLine = true, label = { Text("Dominio (opcional)") })
             if (proto == Protocol.SFTP) {
                 OutlinedTextField(key, { key = it }, minLines = 3, maxLines = 4, label = { Text(if (p == null) "Clave privada (pegar, opcional)" else "Clave privada (vacío = conservar)") }, visualTransformation = PasswordVisualTransformation())
                 TextButton(onClick = { pickKey.launch("*/*") }) { Text("Elegir archivo de clave…") }

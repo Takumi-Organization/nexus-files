@@ -187,14 +187,13 @@ fun kindLabel(k: Kind) = when (k) { Kind.FOLDER -> "Carpetas"; Kind.IMAGE -> "Im
                 val r = rects[i]; if (r.w < 2f || r.h < 2f) return@forEachIndexed
                 val kind = if (n2.isDir) Kind.FOLDER else if (n2.synthetic) Kind.OTHER else Kinds.of(n2.name.substringAfterLast('.', "").lowercase())
                 // las carpetas recorren la familia del acento (acento → armónico) según su rango; los archivos llevan el color de su tipo
-                val color = if (n2.isDir) androidx.compose.ui.graphics.lerp(C.accent, C.accent2, (i.coerceAtMost(9) / 9f)) else C.kind(kind)
+                val color = if (n2.isDir) androidx.compose.ui.graphics.lerp(C.accent, C.surface3, (i.coerceAtMost(9) / 9f) * 0.6f) else C.kind(kind)
                 val wDp = with(d) { r.w.toDp() }; val hDp = with(d) { r.h.toDp() }
                 val p = remember(node, i) { Animatable(if (reduce) 1f else 0f) }
                 LaunchedEffect(node) { if (!reduce) { kotlinx.coroutines.delay(minOf(i, 14) * 40L); p.animateTo(1f, spring(0.7f, 300f)) } }
                 Box(Modifier.offset(with(d) { r.x.toDp() }, with(d) { r.y.toDp() }).size(wDp, hDp).padding(2.dp)
                     .graphicsLayer { val sc = 0.9f + 0.1f * p.value; scaleX = sc; scaleY = sc; alpha = p.value.coerceIn(0f, 1f) }
                     .clip(Squircle(if (wDp > 80.dp && hDp > 60.dp) 18.dp else 8.dp)).background(color)
-                    .drawBehind { drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.14f), Color.Transparent, Color.Black.copy(alpha = 0.12f)))) }
                     .nxClick({ vm.enter(n2) }, enabled = n2.isDir).padding(9.dp)) {
                     if (wDp > 50.dp && hDp > 36.dp) Column {
                         Text(n2.name, style = T.title(if (wDp > 120.dp) 22 else 15, Color.White), maxLines = 1, overflow = TextOverflow.Clip, softWrap = false)

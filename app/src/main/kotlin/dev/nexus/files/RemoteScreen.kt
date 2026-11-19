@@ -1,6 +1,5 @@
 package dev.nexus.files
 
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
@@ -146,7 +145,7 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
 
 @Composable private fun ProfileCard(p: RemoteProfile, index: Int, onOpen: () -> Unit, onMore: () -> Unit) {
     val c = C.origin(p.protocol)
-    Row(Modifier.fillMaxWidth().enter(index).shadow(14.dp, Squircle(26.dp), ambientColor = Color.Black.copy(alpha = 0.15f), spotColor = Color.Black.copy(alpha = 0.25f)).clip(Squircle(26.dp)).background(C.surface).border(1.dp, C.hair, Squircle(26.dp))
+    Row(Modifier.fillMaxWidth().enter(index).clip(Squircle(26.dp)).background(C.surface).border(1.dp, C.hair, Squircle(26.dp))
         .nxClick(onOpen).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(54.dp).clip(Squircle(17.dp)).background(c.copy(alpha = 0.18f)), Alignment.Center) { Text(if (p.protocol == Protocol.SAF) "SAF" else p.protocol.name.take(4), style = TextStyle(fontFamily = Fonts.mono, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = c)) }
         Spacer(Modifier.width(14.dp))
@@ -166,7 +165,7 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
         jobs.takeLast(3).forEach { j ->
             val run = j.state == TState.RUNNING
             val speed = rememberSpeed(if (run) j.bytes else 0L)
-            Column(Modifier.fillMaxWidth().shadow(16.dp, Squircle(24.dp), ambientColor = Color.Black.copy(alpha = 0.15f), spotColor = Color.Black.copy(alpha = 0.25f)).clip(Squircle(24.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(24.dp)).padding(16.dp)) {
+            Column(Modifier.fillMaxWidth().clip(Squircle(24.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(24.dp)).padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(j.title, style = T.name(20), maxLines = 1, overflow = TextOverflow.Ellipsis)

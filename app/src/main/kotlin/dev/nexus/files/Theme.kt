@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -23,22 +24,29 @@ enum class ThemeMode(val label: String) { SYSTEM("Auto"), LIGHT("Claro"), DARK("
 class Palette(val bg: Color, val surface: Color, val surface2: Color, val surface3: Color, val text: Color, val dim: Color, val faint: Color, val hair: Color, val danger: Color, val dark: Boolean)
 
 /**
- * Acento principal vibrante + tono claro [hi] (misma familia, para degradados tonales sutiles) + armónico [second]
- * (análogo a ±35° en la rueda, para los halos ambientales). [ink] es el texto sobre el acento.
+ * Acento (identidad Ryoku Glass, 2026-11-19): cinco, uno activo, con variante oscura y clara (la clara es más oscura para
+ * que el acento como texto o relleno llegue a 4,5:1 sobre el lienzo claro). [ink] es el texto sobre el relleno.
+ * Los nombres del enum se conservan por lo guardado en preferencias: BRASA = Bermellón, ULTRAMAR = Egeo,
+ * ESMERALDA = Lima, ROSA = Fucsia, AMBAR = Oro. ORQUIDEA se retiró (un valor guardado cae al acento por defecto).
  */
-enum class Accent(val label: String, val color: Color, val hi: Color, val second: Color, val ink: Color) {
-    BRASA("Brasa", Color(0xFFFF5A3C), Color(0xFFFF8A5C), Color(0xFFFFB24A), Color(0xFFFFFFFF)),
-    ULTRAMAR("Ultramar", Color(0xFF3D6BFF), Color(0xFF6B93FF), Color(0xFF8B6BFF), Color(0xFFFFFFFF)),
-    ESMERALDA("Esmeralda", Color(0xFF10C98A), Color(0xFF4FE3AB), Color(0xFF2BC7D8), Color(0xFF03150F)),
-    ORQUIDEA("Orquídea", Color(0xFFB84DFF), Color(0xFFD683FF), Color(0xFFFF4DA6), Color(0xFFFFFFFF)),
-    ROSA("Rosa", Color(0xFFFF3D7F), Color(0xFFFF7AA3), Color(0xFFFF7A45), Color(0xFFFFFFFF)),
-    AMBAR("Ámbar", Color(0xFFFFB020), Color(0xFFFFD35C), Color(0xFFFF7A30), Color(0xFF1A1100)),
+enum class Accent(val label: String, private val dark: Color, private val onDark: Color, private val light: Color) {
+    BRASA("Bermellón", Color(0xFFFF5A4A), Color(0xFF1B0805), Color(0xFFD12B1F)),
+    ULTRAMAR("Egeo", Color(0xFF62B6E8), Color(0xFF04141D), Color(0xFF0B6B99)),
+    ESMERALDA("Lima", Color(0xFFB6E04A), Color(0xFF121A00), Color(0xFF4F7A00)),
+    ROSA("Fucsia", Color(0xFFFF6FB1), Color(0xFF21040F), Color(0xFFC4166F)),
+    AMBAR("Oro", Color(0xFFF2B33D), Color(0xFF1D1300), Color(0xFF8F5F00));
+
+    val color: Color get() = if (Nx.pal.dark) dark else light
+    val ink: Color get() = if (Nx.pal.dark) onDark else Color.White
+    /** Sin degradados en Glass: las variantes «alta» y «armónica» son el propio acento. */
+    val hi: Color get() = color
+    val second: Color get() = color
 }
 
 /** Estado global de apariencia (preferencias). Lo leen los composables: cambiarlo recompone toda la app. */
 object Nx {
     var mode by mutableStateOf(ThemeMode.SYSTEM)
-    var accent by mutableStateOf(Accent.BRASA)
+    var accent by mutableStateOf(Accent.AMBAR)
     var haptics by mutableStateOf(true)
     var animations by mutableStateOf(true)
     var systemDark by mutableStateOf(true)
@@ -51,16 +59,16 @@ object Nx {
     /** La barra de pestañas se oculta (p. ej. mientras hay una selección y su barra de acciones). */
     var hideNav by mutableStateOf(false)
 
-    private val dark = Palette(Color(0xFF090B0F), Color(0xFF12151B), Color(0xFF1A1E26), Color(0xFF242934), Color(0xFFF5F7FB), Color(0xFF9AA4B5), Color(0xFF5E6778), Color(0x14FFFFFF), Color(0xFFFF5C6C), true)
-    private val amoled = Palette(Color(0xFF000000), Color(0xFF0B0D11), Color(0xFF14171D), Color(0xFF1E222B), Color(0xFFF7F8FC), Color(0xFF9AA4B5), Color(0xFF5E6778), Color(0x17FFFFFF), Color(0xFFFF5C6C), true)
-    private val light = Palette(Color(0xFFF2F4F9), Color(0xFFFFFFFF), Color(0xFFE9ECF3), Color(0xFFDDE2EC), Color(0xFF0A0D14), Color(0xFF5A6578), Color(0xFF98A2B3), Color(0x140A0F1E), Color(0xFFE5303F), false)
+    private val dark = Palette(Color(0xFF0F1115), Color(0xFF171A20), Color(0xFF232830), Color(0xFF2C323C), Color(0xFFECEFF4), Color(0xFF8E97A6), Color(0xFF5F6877), Color(0x1AECEFF4), Color(0xFFFF7A70), true)
+    private val amoled = Palette(Color(0xFF000000), Color(0xFF0D0F13), Color(0xFF181B21), Color(0xFF232730), Color(0xFFF2F4F8), Color(0xFF8E97A6), Color(0xFF5F6877), Color(0x1AECEFF4), Color(0xFFFF7A70), true)
+    private val light = Palette(Color(0xFFF4F5F7), Color(0xFFFFFFFF), Color(0xFFE9ECF0), Color(0xFFDDE1E7), Color(0xFF14171C), Color(0xFF5F6773), Color(0xFF9AA2AE), Color(0x1C14171C), Color(0xFFB3261E), false)
 
     val pal: Palette get() = when (mode) { ThemeMode.LIGHT -> light; ThemeMode.DARK -> dark; ThemeMode.AMOLED -> amoled; ThemeMode.SYSTEM -> if (systemDark) dark else light }
 
     fun load(c: Context) {
         val p = c.getSharedPreferences("nexus", 0)
         mode = runCatching { ThemeMode.valueOf(p.getString("theme", "SYSTEM")!!) }.getOrDefault(ThemeMode.SYSTEM)
-        accent = runCatching { Accent.valueOf(p.getString("accent2", "BRASA")!!) }.getOrDefault(Accent.BRASA)
+        accent = runCatching { Accent.valueOf(p.getString("accent2", "AMBAR")!!) }.getOrDefault(Accent.AMBAR)
         haptics = p.getBoolean("haptics", true); animations = p.getBoolean("animations", true)
         systemDark = (c.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
     }
@@ -75,7 +83,8 @@ object C {
     val bg get() = Nx.pal.bg; val surface get() = Nx.pal.surface; val surface2 get() = Nx.pal.surface2; val surface3 get() = Nx.pal.surface3
     val text get() = Nx.pal.text; val dim get() = Nx.pal.dim; val faint get() = Nx.pal.faint; val rule get() = Nx.pal.hair; val hair get() = Nx.pal.hair; val danger get() = Nx.pal.danger
     val accent get() = Nx.accent.color; val accentHi get() = Nx.accent.hi; val accent2 get() = Nx.accent.second; val onAccent get() = Nx.accent.ink
-    val accentBrush get() = Brush.verticalGradient(listOf(Nx.accent.hi, Nx.accent.color))
+    /** Sin degradados en Glass: el «pincel» de acento es plano. */
+    val accentBrush: Brush get() = SolidColor(Nx.accent.color)
 
     /** Tipos de archivo: mismo croma y luminosidad en toda la rueda para que convivan; el color significa el tipo. */
     fun kind(k: Kind) = when (k) {

@@ -47,7 +47,6 @@ fun ViewerScreen(entry: Entry, kind: VKind, onClose: () -> Unit, onExternal: () 
     ContainerTransform {
         DragDismiss(onClose) {
             Box(Modifier.fillMaxSize().background(C.bg)) {
-                AmbientGlow(color = tint, second = tint, strength = 0.9f)
                 Column(Modifier.fillMaxSize().statusBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(42.dp).clip(androidx.compose.foundation.shape.CircleShape).background(C.surface3).nxClick(onClose), Alignment.Center) { Text("✕", style = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = C.text, fontWeight = FontWeight.Bold)) }

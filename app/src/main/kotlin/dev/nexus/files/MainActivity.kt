@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
@@ -142,6 +141,8 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
     Box(Modifier.fillMaxSize().background(C.bg)) {
     Column(Modifier.fillMaxSize().then(if (blur > 0.dp) Modifier.blur(blur) else Modifier).graphicsLayer { scaleX = 0.985f + 0.015f * dim.let { (it - 0.9f) * 10f }; scaleY = scaleX }) {
         Box(Modifier.weight(1f)) {
+            val navGlass = rememberGlassBackdrop()
+            Box(Modifier.fillMaxSize().glassSource(navGlass)) {
             androidx.compose.animation.AnimatedContent(tab, transitionSpec = {
                 if (reduce) androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
                 else {
@@ -160,11 +161,12 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
                     Tab.ANALYZE -> AnalyzerScreen(analyzer, home.primaryRoot, st.dir) { explorer.open(it); tab = Tab.FILES }
                 }
             }
-            androidx.compose.animation.AnimatedVisibility(!Nx.hideNav, Modifier.align(Alignment.BottomCenter), enter = androidx.compose.animation.slideInVertically(androidx.compose.animation.core.spring(0.8f, 450f)) { it } + androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.spring(0.9f, 600f)) { it } + androidx.compose.animation.fadeOut()) { Box {
-                Box(Modifier.matchParentSize().background(C.bg))
-                Box(Modifier.align(Alignment.TopCenter).offset(y = (-44).dp).fillMaxWidth().height(44.dp).background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, C.bg))))
-                NxNav(Tab.entries.map { it.label }, tab.ordinal) { tab = Tab.entries[it] }
-            } }
+            }
+            androidx.compose.animation.AnimatedVisibility(!Nx.hideNav, Modifier.align(Alignment.BottomCenter), enter = androidx.compose.animation.slideInVertically(androidx.compose.animation.core.spring(0.8f, 450f)) { it } + androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.spring(0.9f, 600f)) { it } + androidx.compose.animation.fadeOut()) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalGlassBackdrop provides navGlass) {
+                    NxNav(Tab.entries.map { it.label }, tab.ordinal) { tab = Tab.entries[it] }
+                }
+            }
         }
     }
     androidx.compose.animation.AnimatedVisibility(settings, enter = androidx.compose.animation.slideInVertically(androidx.compose.animation.core.spring(0.85f, 380f)) { it / 3 } + androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.slideOutVertically { it / 3 } + androidx.compose.animation.fadeOut()) {
@@ -178,13 +180,13 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
     }
 }
 
-/** Barra de pestañas flotante: cápsula translúcida con sombra, iconos de trazo fino y una pastilla que se desliza con muelle. */
+/** Barra de pestañas flotante: superficie de cristal (desenfoque real del contenido), iconos de trazo fino y una pastilla que se desliza con muelle. */
 @Composable
 private fun NxNav(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     val h = rememberHaptics()
-    val shape = Squircle(30.dp)
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
     BoxWithConstraints(Modifier.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth().height(70.dp)
-        .androidx_shadow(shape).clip(shape).background(C.surface2.copy(alpha = 0.985f)).border(1.dp, C.hair, shape).padding(5.dp)) {
+        .glass(shape).padding(5.dp)) {
         val w = maxWidth / labels.size
         val x by androidx.compose.animation.core.animateDpAsState(w * selected, androidx.compose.animation.core.spring(0.72f, 520f), label = "nx")
         Box(Modifier.offset(x = x).width(w).fillMaxHeight().clip(Squircle(24.dp)).background(C.accent.copy(alpha = 0.16f)))
@@ -202,7 +204,6 @@ private fun NxNav(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) 
     }
 }
 
-private fun Modifier.androidx_shadow(shape: androidx.compose.ui.graphics.Shape) = this.shadow(26.dp, shape, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.45f))
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTabIcon(i: Int, c: Color) {
     val s = size.minDimension; val w = s * 0.085f

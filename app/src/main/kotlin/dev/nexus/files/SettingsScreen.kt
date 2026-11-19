@@ -9,7 +9,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -30,7 +29,6 @@ fun SettingsScreen(vm: ExplorerViewModel, onClose: () -> Unit) {
     fun persist() = Nx.save(ctx)
     DragDismiss(onClose) {
         Box(Modifier.fillMaxSize().background(C.bg)) {
-            AmbientGlow(strength = 1f)
             Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).navigationBarsPadding()) {
                 Row(Modifier.padding(start = 10.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Ajustes", style = T.title(52), modifier = Modifier.weight(1f))
@@ -45,8 +43,8 @@ fun SettingsScreen(vm: ExplorerViewModel, onClose: () -> Unit) {
                             val on = a == Nx.accent
                             val sc by androidx.compose.animation.core.animateFloatAsState(if (on) 1f else 0.86f, androidx.compose.animation.core.spring(0.5f, 500f), label = "sw")
                             val h = rememberHaptics()
-                            Box(Modifier.weight(1f).aspectRatio(1f).graphicsLayer { scaleX = sc; scaleY = sc }.shadow(if (on) 14.dp else 0.dp, CircleShape, ambientColor = a.color.copy(alpha = 0.3f), spotColor = a.color.copy(alpha = 0.7f)).clip(CircleShape)
-                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(a.hi, a.color))).then(if (on) Modifier.border(3.dp, C.text, CircleShape) else Modifier)
+                            Box(Modifier.weight(1f).aspectRatio(1f).graphicsLayer { scaleX = sc; scaleY = sc }.clip(CircleShape)
+                                .background(a.color).then(if (on) Modifier.border(3.dp, C.text, CircleShape) else Modifier)
                                 .clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { h.confirm(); Nx.accent = a; persist() }, Alignment.Center) {
                                 if (on) Text("✓", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = a.ink))
                             }

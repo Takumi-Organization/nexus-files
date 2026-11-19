@@ -14,7 +14,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.TextStyle
@@ -64,7 +63,7 @@ fun HomeScreen(home: HomeViewModel, onOpen: (Entry) -> Unit, onOpenDir: (File) -
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 130.dp)) {
         item {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 24.dp, end = 14.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(34.dp).shadow(10.dp, Squircle(11.dp), ambientColor = C.accent.copy(alpha = 0.3f), spotColor = C.accent.copy(alpha = 0.6f)).clip(Squircle(11.dp)).background(C.accentBrush), Alignment.Center) { Glyph(Kind.FOLDER, 22.dp, ink = C.onAccent) }
+                Box(Modifier.size(34.dp).clip(Squircle(11.dp)).background(C.accentBrush), Alignment.Center) { Glyph(Kind.FOLDER, 22.dp, ink = C.onAccent) }
                 Spacer(Modifier.width(10.dp)); Text("Nexus", style = T.title(34), modifier = Modifier.weight(1f))
                 NxBtn("Ajustes", onSettings, kind = BtnKind.GHOST, small = true)
             }
@@ -105,9 +104,8 @@ private fun <T> androidx.compose.foundation.lazy.LazyListScope.itemsIndexed(item
     val (n, u) = sizeParts(used)
     val frac = if (d.total > 0) used.toFloat() / d.total else 0f
     val tot = sizeParts(d.total)
-    Column(Modifier.padding(horizontal = 14.dp).padding(top = 18.dp).shadow(26.dp, Squircle(34.dp), ambientColor = Color.Black.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.3f)).clip(Squircle(34.dp)).background(C.surface).border(1.dp, C.hair, Squircle(34.dp))) {
+    Column(Modifier.padding(horizontal = 14.dp).padding(top = 18.dp).clip(Squircle(34.dp)).background(C.surface).border(1.dp, C.hair, Squircle(34.dp))) {
         Box {
-            AmbientGlow(Modifier.matchParentSize(), strength = 0.9f)
             Column(Modifier.padding(horizontal = 22.dp, vertical = 22.dp)) {
                 Text("Almacenamiento interno", style = T.label(14, C.dim))
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -167,9 +165,8 @@ private fun <T> androidx.compose.foundation.lazy.LazyListScope.itemsIndexed(item
     val p = remember { Animatable(if (reduce) 1f else 0f) }
     LaunchedEffect(Unit) { if (!reduce) { kotlinx.coroutines.delay(120L + index * 70L); p.animateTo(1f, spring(0.68f, 300f)) } }
     Box(modifier.graphicsLayer { val sc = 0.86f + 0.14f * p.value; scaleX = sc; scaleY = sc; alpha = p.value.coerceIn(0f, 1f) }
-        .shadow(12.dp, Squircle(28.dp), ambientColor = col.copy(alpha = 0.12f), spotColor = col.copy(alpha = 0.3f))
+        
         .clip(Squircle(28.dp)).background(C.surface)
-        .drawBehind { drawRect(Brush.radialGradient(listOf(col.copy(alpha = if (dark) 0.30f else 0.22f), Color.Transparent), Offset(0f, size.height), size.maxDimension * 1.05f)) }
         .border(1.dp, C.hair, Squircle(28.dp)).nxClick(onClick).padding(if (big) 18.dp else 14.dp)) {
         Column(Modifier.fillMaxSize()) {
             val (n, u) = sizeParts(s?.size ?: 0)

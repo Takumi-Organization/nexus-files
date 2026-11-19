@@ -72,9 +72,14 @@ private fun squirclePath(w: Float, h: Float, r: Float): Path {
         lineTo(0f, e); cubicTo(0f, e * k, e * k, 0f, e, 0f); close()
     }
 }
+/**
+ * Ryoku Glass usa radios pequeños (6 · 10 · 12 · 16 · 20). Se conserva el nombre y los radios de cada sitio de la app
+ * y se traducen a la escala nueva en un solo punto, en vez de tocar cada llamada.
+ */
+fun glassRadius(r: Dp): Dp = when { r <= 8.dp -> 6.dp; r <= 14.dp -> 10.dp; r <= 22.dp -> 12.dp; r <= 30.dp -> 16.dp; else -> 20.dp }
 class Squircle(private val radius: Dp = 16.dp) : Shape {
     override fun createOutline(size: Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): Outline =
-        Outline.Generic(squirclePath(size.width, size.height, with(density) { radius.toPx() }))
+        androidx.compose.foundation.shape.RoundedCornerShape(glassRadius(radius)).createOutline(size, layoutDirection, density)
 }
 /** Compatibilidad: el antiguo «chaflán» ahora es la esquina continua con ese radio. */
 fun Chamfer(cut: Dp = 12.dp, corner: Int = 1): Shape = Squircle(cut * 1.1f)
@@ -145,10 +150,10 @@ enum class BtnKind { PRIMARY, INK, GHOST, DANGER }
     val shape = Squircle(if (small) 12.dp else 16.dp)
     val fg = when (kind) { BtnKind.PRIMARY -> C.onAccent; BtnKind.INK -> C.bg; BtnKind.GHOST -> C.text; BtnKind.DANGER -> Color.White }
     val bg: Modifier = when (kind) {
-        BtnKind.PRIMARY -> Modifier.shadow(if (enabled) 10.dp else 0.dp, shape, ambientColor = C.accent.copy(alpha = 0.25f), spotColor = C.accent.copy(alpha = 0.55f)).background(C.accentBrush, shape)
+        BtnKind.PRIMARY -> Modifier.background(C.accent, shape)
         BtnKind.INK -> Modifier.background(C.text, shape)
         BtnKind.GHOST -> Modifier.background(C.surface3, shape)
-        BtnKind.DANGER -> Modifier.shadow(if (enabled) 8.dp else 0.dp, shape, ambientColor = C.danger.copy(alpha = 0.2f), spotColor = C.danger.copy(alpha = 0.5f)).background(C.danger, shape)
+        BtnKind.DANGER -> Modifier.background(C.danger, shape)
     }
     Box(modifier.heightIn(min = if (small) 40.dp else 54.dp).graphicsLayer { alpha = if (enabled) 1f else 0.4f }.then(bg).clip(shape).nxClick(onClick, enabled = enabled).padding(horizontal = if (small) 16.dp else 24.dp), Alignment.Center) {
         Text(text, style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.SemiBold, fontSize = if (small) 14.sp else 16.sp, color = fg, letterSpacing = (-0.2).sp), maxLines = 1)
@@ -186,7 +191,7 @@ enum class BtnKind { PRIMARY, INK, GHOST, DANGER }
     BoxWithConstraints(modifier.fillMaxWidth().height(44.dp).clip(CircleShape).background(C.surface3).padding(3.dp)) {
         val w = maxWidth / options.size
         val x by animateDpAsState(w * idx, spring(0.72f, 520f), label = "seg")
-        Box(Modifier.offset(x = x).width(w).fillMaxHeight().shadow(4.dp, CircleShape).background(C.surface2, CircleShape))
+        Box(Modifier.offset(x = x).width(w).fillMaxHeight().background(C.surface2, CircleShape).border(1.dp, C.hair, CircleShape))
         Row(Modifier.fillMaxSize()) {
             options.forEachIndexed { i, (v, l) ->
                 Box(Modifier.weight(1f).fillMaxHeight().clip(CircleShape).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { if (i != idx) { h.tick(); onSelect(v) } }, Alignment.Center) {
@@ -223,7 +228,7 @@ enum class BtnKind { PRIMARY, INK, GHOST, DANGER }
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.32f * p.value)).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onDismiss() }.statusBarsPadding().navigationBarsPadding().imePadding(), Alignment.Center) {
             Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().heightIn(max = 700.dp)
                 .graphicsLayer { val s = 0.9f + 0.1f * p.value; scaleX = s; scaleY = s; alpha = p.value.coerceIn(0f, 1f) }
-                .shadow(40.dp, Squircle(30.dp), ambientColor = Color.Black.copy(alpha = 0.4f), spotColor = Color.Black.copy(alpha = 0.5f)).clip(Squircle(30.dp)).background(C.surface).border(1.dp, C.hair, Squircle(30.dp))
+                .clip(Squircle(30.dp)).background(C.surface).border(1.dp, C.hair, Squircle(30.dp))
                 .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}) {
                 Text(title, style = T.title(34), modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 10.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp), content = content)
@@ -252,31 +257,7 @@ enum class BtnKind { PRIMARY, INK, GHOST, DANGER }
 
 @Composable fun Rule(modifier: Modifier = Modifier, thick: Dp = 1.dp, color: Color = C.hair) = Box(modifier.fillMaxWidth().height(1.dp).background(color))
 
-/**
- * Halo ambiental: dos manchas radiales muy sutiles (color de contexto + armónico) que cambian con animación de color.
- * Se rasterizan a un tercio de resolución y se escalan; redibujar los dos sombreados a pantalla completa en cada
- * fotograma costaba ~15 ms de GPU por frame al desplazar listas (medido con `gfxinfo`).
- */
-@Composable fun AmbientGlow(modifier: Modifier = Modifier, color: Color = C.accent, second: Color = C.accent2, strength: Float = 1f) {
-    val a by animateColorAsState(color, tween(600), label = "amb1")
-    val b by animateColorAsState(second, tween(800), label = "amb2")
-    val dark = Nx.pal.dark
-    Box(modifier.fillMaxSize().drawWithCache {
-        val scale = 0.34f
-        val w = (size.width * scale).toInt().coerceAtLeast(1)
-        val h = (size.height * scale).toInt().coerceAtLeast(1)
-        val glow = androidx.compose.ui.graphics.ImageBitmap(w, h)
-        val canvas = androidx.compose.ui.graphics.Canvas(glow)
-        val sw = w.toFloat(); val sh = h.toFloat()
-        androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(this, layoutDirection, canvas, Size(sw, sh)) {
-            drawRect(Brush.radialGradient(listOf(a.copy(alpha = (if (dark) 0.30f else 0.20f) * strength), Color.Transparent), Offset(sw * 0.10f, -sh * 0.02f), sw * 0.95f))
-            drawRect(Brush.radialGradient(listOf(b.copy(alpha = (if (dark) 0.16f else 0.12f) * strength), Color.Transparent), Offset(sw, sh * 0.16f), sw * 0.75f))
-        }
-        onDrawBehind { drawImage(glow, dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())) }
-    })
-}
-
-// ---------------- Progreso: cápsula con brillo en movimiento ----------------
+// ---------------- Progreso: cápsula plana (sin degradado ni brillo) ----------------
 @Composable fun NxProgress(fraction: Float?, modifier: Modifier = Modifier, running: Boolean = true, color: Color = C.accent) {
     val reduce = rememberReduceMotion()
     val t = rememberInfiniteTransition(label = "pg")
@@ -287,11 +268,7 @@ enum class BtnKind { PRIMARY, INK, GHOST, DANGER }
             val w = if (fraction == null) size.width * 0.32f else (size.width * f.coerceIn(0f, 1f)).coerceAtLeast(size.height)
             val x0 = if (fraction == null) (size.width - w) * (if (reduce) 0f else (0.5f - 0.5f * kotlin.math.cos(sh * 6.2832f))) else 0f
             val r = size.height / 2
-            drawRoundRect(Brush.horizontalGradient(listOf(color, Nx.accent.hi.takeIf { color == C.accent } ?: color), x0, x0 + w), Offset(x0, 0f), Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(r, r))
-            if (running && !reduce && fraction != null) {
-                val bw = size.height * 5; val bx = x0 + (w + bw) * sh - bw
-                clipRect(x0, 0f, x0 + w, size.height) { drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.38f), Color.Transparent), bx, bx + bw), Offset(bx, 0f), Size(bw, size.height)) }
-            }
+            drawRoundRect(color, Offset(x0, 0f), Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(r, r))
         }
     }
 }
@@ -337,7 +314,7 @@ fun DrawScope.drawGlyph(kind: Kind, ink: Color) {
 /** Aviso breve: cápsula flotante con sombra que sube con un muelle. */
 @Composable fun NxToast(msg: String?, modifier: Modifier = Modifier) {
     AnimatedVisibility(msg != null, modifier.padding(bottom = 16.dp, start = 16.dp, end = 16.dp), enter = slideInVertically(spring(0.72f, 450f)) { it } + fadeIn(), exit = slideOutVertically { it / 2 } + fadeOut()) {
-        Box(Modifier.shadow(18.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.4f)).clip(CircleShape).background(C.text).padding(horizontal = 20.dp, vertical = 13.dp)) { Text(msg.orEmpty(), style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = C.bg), maxLines = 2) }
+        Box(Modifier.clip(CircleShape).background(C.text).padding(horizontal = 20.dp, vertical = 13.dp)) { Text(msg.orEmpty(), style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = C.bg), maxLines = 2) }
     }
 }
 

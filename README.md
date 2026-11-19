@@ -123,3 +123,10 @@ verificado en emulador (los atajos `VIEW_PATH`/`OPEN_DIR` existen solo en debug)
 
 ## Probar
 `./gradlew :core:test` · `./gradlew :app:assembleDebug` · permiso: `adb shell appops set dev.nexus.files MANAGE_EXTERNAL_STORAGE allow`
+
+## Identidad visual: Ryoku Glass (2026-11-19)
+Rediseño sobre la identidad común de Adrián (vault: `Estilo visual Ryoku Glass`): neutros fríos (`#0F1115` / `#171A20` / `#232830`; claro `#F4F5F7`; AMOLED conserva el negro real), filetes de 1 dp, radios 6-20, **sin sombras, degradados ni halos ambientales**, Inter y cinco acentos con variante clara (Bermellón, **Oro por defecto**, Lima, Fucsia, Egeo). Los nombres del enum `Accent` se conservan por las preferencias guardadas (BRASA=Bermellón, ULTRAMAR=Egeo, ESMERALDA=Lima, ROSA=Fucsia, AMBAR=Oro); ORQUIDEA se retiró y un valor guardado cae al acento por defecto.
+
+`Squircle` ahora traduce sus radios a la escala Glass en un solo punto (`glassRadius`). El **cristal** (`Glass.kt`, desenfoque real del contenido con `GraphicsLayer` + `BlurEffect`) solo está en la barra de pestañas, que ahora flota sobre el contenido; el resto de superficies son planas con filete. Con API < 31 (minSdk 30) la barra es opaca.
+
+Capturas: `docs/capturas/glass-*.png` (emulador Pixel_API36). Sin verificar: móvil físico, fluidez del desenfoque al desplazar, las pestañas Remoto con servidores reales, el mapa del Analizador y los visores (no revisados tras el cambio), y contraste del texto sobre cristal con script.

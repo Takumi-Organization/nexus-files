@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -56,7 +55,7 @@ fun PermissionGate(onLimited: () -> Unit, onGrant: () -> Unit) {
     Box(Modifier.fillMaxSize().background(C.bg)) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(28.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Column {
-                Box(Modifier.size(72.dp).shadow(22.dp, Squircle(22.dp), ambientColor = C.accent.copy(alpha = 0.3f), spotColor = C.accent.copy(alpha = 0.6f)).clip(Squircle(22.dp)).background(C.accentBrush), Alignment.Center) { Glyph(Kind.FOLDER, 46.dp, ink = C.onAccent) }
+                Box(Modifier.size(72.dp).clip(Squircle(22.dp)).background(C.accentBrush), Alignment.Center) { Glyph(Kind.FOLDER, 46.dp, ink = C.onAccent) }
                 Spacer(Modifier.height(36.dp))
                 Text("Acceso a\ntodos tus\narchivos", style = T.title(58), modifier = Modifier.enter(0))
                 Spacer(Modifier.height(16.dp))
@@ -200,7 +199,7 @@ private fun nameError(v: String): String? = (Names.validate(v) as? Names.Result.
 
 /** Raíl de acciones contextual: flota sobre el contenido con sombra y esquinas continuas. */
 @Composable private fun ActionRail(n: Int, onCopy: () -> Unit, onCut: () -> Unit, onShare: () -> Unit, onRename: (() -> Unit)?, onDelete: () -> Unit, onInfo: (() -> Unit)?, onFav: () -> Unit, onZip: () -> Unit, onTags: () -> Unit) {
-    Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp).padding(bottom = 8.dp).shadow(24.dp, Squircle(26.dp), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.45f)).clip(Squircle(26.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(26.dp))) {
+    Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp).padding(bottom = 8.dp).clip(Squircle(26.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(26.dp))) {
         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             item { NxBtn("Copiar", onCopy, kind = BtnKind.PRIMARY, small = true) }
             item { NxBtn("Cortar", onCut, kind = BtnKind.GHOST, small = true) }
@@ -219,7 +218,7 @@ private fun nameError(v: String): String? = (Names.validate(v) as? Names.Result.
     Column(Modifier.padding(bottom = if (Nx.hideNav) 0.dp else 90.dp)) {
         s.op?.let { op ->
             val speed = rememberSpeed(op.progress?.doneBytes ?: 0L)
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).shadow(20.dp, Squircle(24.dp), ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.4f)).clip(Squircle(24.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(24.dp)).padding(18.dp)) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).clip(Squircle(24.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(24.dp)).padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(op.title, style = T.label(12, C.accent))
@@ -237,7 +236,7 @@ private fun nameError(v: String): String? = (Names.validate(v) as? Names.Result.
             }
         }
         s.clip?.let { c ->
-            if (s.op == null) Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth().shadow(20.dp, Squircle(24.dp), ambientColor = C.accent.copy(alpha = 0.2f), spotColor = C.accent.copy(alpha = 0.45f)).clip(Squircle(24.dp)).background(C.accentBrush).padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (s.op == null) Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth().clip(Squircle(24.dp)).background(C.accentBrush).padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 RollingText("${c.paths.size}", T.numeral(44, C.onAccent)); Spacer(Modifier.width(10.dp))
                 Text("para ${if (c.cut) "mover" else "copiar"}", style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.Medium, fontSize = 15.sp, color = C.onAccent), modifier = Modifier.weight(1f))
                 NxBtn("Descartar", vm::clearClip, kind = BtnKind.INK, small = true); Spacer(Modifier.width(8.dp)); NxBtn("Pegar aquí", vm::paste, kind = BtnKind.INK, small = true)

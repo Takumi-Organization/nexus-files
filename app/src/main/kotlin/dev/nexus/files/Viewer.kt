@@ -112,7 +112,7 @@ fun ViewerScreen(entry: Entry, kind: VKind, onClose: () -> Unit, onExternal: () 
                 Row(Modifier.padding(horizontal = 8.dp)) {
                     Text("${i + 1}".padStart(5), color = C.dim, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                     Spacer(Modifier.width(10.dp))
-                    Text(l, fontFamily = FontFamily.Monospace, fontSize = 12.sp, softWrap = false)
+                    Text(l, color = C.text, fontFamily = FontFamily.Monospace, fontSize = 12.sp, softWrap = false)
                 }
             }
         }

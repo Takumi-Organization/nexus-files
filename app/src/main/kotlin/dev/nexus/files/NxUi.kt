@@ -10,7 +10,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.drawscope.clipRect
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.BasicTextField
@@ -62,27 +61,19 @@ object T {
 
 @Composable fun NxText(t: String, style: TextStyle, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE) = Text(t, modifier, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 
-// ---------------- Forma: esquina continua (squircle) ----------------
-private fun squirclePath(w: Float, h: Float, r: Float): Path {
-    val e = (r * 1.32f).coerceAtMost(min(w, h) / 2); val k = 0.36f
-    return Path().apply {
-        moveTo(e, 0f); lineTo(w - e, 0f); cubicTo(w - e * k, 0f, w, e * k, w, e)
-        lineTo(w, h - e); cubicTo(w, h - e * k, w - e * k, h, w - e, h)
-        lineTo(e, h); cubicTo(e * k, h, 0f, h - e * k, 0f, h - e)
-        lineTo(0f, e); cubicTo(0f, e * k, e * k, 0f, e, 0f); close()
-    }
-}
+// ---------------- Forma: corte diagonal Takumi ----------------
 /**
- * Ryoku Glass usa radios pequeños (6 · 10 · 12 · 16 · 20). Se conserva el nombre y los radios de cada sitio de la app
- * y se traducen a la escala nueva en un solo punto, en vez de tocar cada llamada.
+ * Takumi: radio 0 y esquina superior derecha cortada en diagonal (10/14/22 dp). Se conserva el nombre `Squircle` y el
+ * radio de cada sitio de la app; el corte se deriva de él en un solo punto.
  */
-fun glassRadius(r: Dp): Dp = when { r <= 8.dp -> 6.dp; r <= 14.dp -> 10.dp; r <= 22.dp -> 12.dp; r <= 30.dp -> 16.dp; else -> 20.dp }
+fun takumiCut(r: Dp): Dp = when { r <= 12.dp -> 10.dp; r <= 18.dp -> 14.dp; else -> 22.dp }
 class Squircle(private val radius: Dp = 16.dp) : Shape {
     override fun createOutline(size: Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): Outline =
-        androidx.compose.foundation.shape.RoundedCornerShape(glassRadius(radius)).createOutline(size, layoutDirection, density)
+        androidx.compose.foundation.shape.CutCornerShape(topStart = 0.dp, topEnd = takumiCut(radius), bottomEnd = 0.dp, bottomStart = 0.dp).createOutline(size, layoutDirection, density)
 }
-/** Compatibilidad: el antiguo «chaflán» ahora es la esquina continua con ese radio. */
-fun Chamfer(cut: Dp = 12.dp, corner: Int = 1): Shape = Squircle(cut * 1.1f)
+/** Compatibilidad: el antiguo «chaflán» es el mismo corte Takumi. */
+fun Chamfer(cut: Dp = 12.dp, corner: Int = 1): Shape = Squircle(cut)
+val TkSm: Shape = Squircle(10.dp)
 
 // ---------------- Movimiento y hápticos ----------------
 @Composable fun rememberReduceMotion(): Boolean { val c = LocalContext.current; return remember(Nx.animations) { Nx.reduceMotion(c) } }
@@ -148,32 +139,32 @@ enum class BtnKind { PRIMARY, INK, GHOST, DANGER }
 
 @Composable fun NxBtn(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, kind: BtnKind = BtnKind.PRIMARY, enabled: Boolean = true, small: Boolean = false) {
     val shape = Squircle(if (small) 12.dp else 16.dp)
-    val fg = when (kind) { BtnKind.PRIMARY -> C.onAccent; BtnKind.INK -> C.bg; BtnKind.GHOST -> C.text; BtnKind.DANGER -> Color.White }
+    val fg = when (kind) { BtnKind.PRIMARY -> C.onAccent; BtnKind.INK -> C.bg; BtnKind.GHOST -> C.text; BtnKind.DANGER -> C.bg }
     val bg: Modifier = when (kind) {
         BtnKind.PRIMARY -> Modifier.background(C.accent, shape)
         BtnKind.INK -> Modifier.background(C.text, shape)
-        BtnKind.GHOST -> Modifier.background(C.surface3, shape)
+        BtnKind.GHOST -> Modifier.border(1.dp, C.hair, shape)
         BtnKind.DANGER -> Modifier.background(C.danger, shape)
     }
     Box(modifier.heightIn(min = if (small) 40.dp else 54.dp).graphicsLayer { alpha = if (enabled) 1f else 0.4f }.then(bg).clip(shape).nxClick(onClick, enabled = enabled).padding(horizontal = if (small) 16.dp else 24.dp), Alignment.Center) {
-        Text(text, style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.SemiBold, fontSize = if (small) 14.sp else 16.sp, color = fg, letterSpacing = (-0.2).sp), maxLines = 1)
+        Text((if (kind == BtnKind.DANGER) "✕ " else "") + text.uppercase(), style = TextStyle(fontFamily = Fonts.mono, fontWeight = FontWeight.SemiBold, fontSize = if (small) 12.sp else 13.sp, color = fg, letterSpacing = 1.4.sp), maxLines = 1)
     }
 }
 
 @Composable fun NxChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    val bg by animateColorAsState(if (selected) C.accent else C.surface3, snappy(), label = "chipbg")
+    val bg by animateColorAsState(if (selected) C.accent else Color.Transparent, snappy(), label = "chipbg")
     val fg by animateColorAsState(if (selected) C.onAccent else C.text, snappy(), label = "chipfg")
-    Box(modifier.heightIn(min = 40.dp).graphicsLayer { alpha = if (enabled) 1f else 0.4f }.clip(CircleShape).background(bg).nxClick(onClick, enabled = enabled).padding(horizontal = 16.dp), Alignment.Center) {
-        Text(text, style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = fg, letterSpacing = (-0.1).sp), maxLines = 1)
+    Box(modifier.heightIn(min = 40.dp).graphicsLayer { alpha = if (enabled) 1f else 0.4f }.clip(TkSm).background(bg).border(1.dp, if (selected) C.accent else C.hair, TkSm).nxClick(onClick, enabled = enabled).padding(horizontal = 16.dp), Alignment.Center) {
+        Text(text.uppercase(), style = TextStyle(fontFamily = Fonts.mono, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = fg, letterSpacing = 1.2.sp), maxLines = 1)
     }
 }
 
 /** Interruptor estilo iOS: pista que cambia de color y bola con muelle. */
 @Composable fun NxSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
-    val track by animateColorAsState(if (checked) C.accent else C.surface3, snappy(), label = "tr")
+    val track by animateColorAsState(if (checked) C.accent else C.surface2, snappy(), label = "tr")
     val x by animateDpAsState(if (checked) 20.dp else 0.dp, spring(0.65f, 600f), label = "kn")
-    Box(Modifier.size(width = 52.dp, height = 32.dp).clip(CircleShape).background(track).padding(3.dp)) {
-        Box(Modifier.offset(x = x).size(26.dp).shadow(3.dp, CircleShape).background(Color.White, CircleShape))
+    Box(Modifier.size(width = 52.dp, height = 32.dp).clip(TkSm).background(track).border(1.dp, C.hair, TkSm).padding(3.dp)) {
+        Box(Modifier.offset(x = x).size(26.dp).clip(TkSm).background(if (checked) C.onAccent else C.dim))
     }
 }
 
@@ -188,14 +179,14 @@ enum class BtnKind { PRIMARY, INK, GHOST, DANGER }
 @Composable fun <T> NxSegment(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
     val idx = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
     val h = rememberHaptics()
-    BoxWithConstraints(modifier.fillMaxWidth().height(44.dp).clip(CircleShape).background(C.surface3).padding(3.dp)) {
+    BoxWithConstraints(modifier.fillMaxWidth().height(44.dp).clip(TkSm).background(C.surface2).border(1.dp, C.hair, TkSm).padding(3.dp)) {
         val w = maxWidth / options.size
         val x by animateDpAsState(w * idx, spring(0.72f, 520f), label = "seg")
-        Box(Modifier.offset(x = x).width(w).fillMaxHeight().background(C.surface2, CircleShape).border(1.dp, C.hair, CircleShape))
+        Box(Modifier.offset(x = x).width(w).fillMaxHeight().background(C.accent, TkSm))
         Row(Modifier.fillMaxSize()) {
             options.forEachIndexed { i, (v, l) ->
-                Box(Modifier.weight(1f).fillMaxHeight().clip(CircleShape).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { if (i != idx) { h.tick(); onSelect(v) } }, Alignment.Center) {
-                    Text(l, style = TextStyle(fontFamily = Fonts.display, fontWeight = if (i == idx) FontWeight.SemiBold else FontWeight.Medium, fontSize = 13.sp, color = if (i == idx) C.text else C.dim), maxLines = 1)
+                Box(Modifier.weight(1f).fillMaxHeight().clip(TkSm).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { if (i != idx) { h.tick(); onSelect(v) } }, Alignment.Center) {
+                    Text(l.uppercase(), style = TextStyle(fontFamily = Fonts.mono, fontWeight = if (i == idx) FontWeight.SemiBold else FontWeight.Normal, fontSize = 12.sp, letterSpacing = 1.2.sp, color = if (i == idx) C.onAccent else C.dim), maxLines = 1)
                 }
             }
         }
@@ -263,12 +254,11 @@ enum class BtnKind { PRIMARY, INK, GHOST, DANGER }
     val t = rememberInfiniteTransition(label = "pg")
     val sh by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "sh")
     val f by animateFloatAsState(fraction ?: 1f, spring(0.9f, 140f), label = "f")
-    Box(modifier.fillMaxWidth().height(10.dp).clip(CircleShape).background(C.surface3)) {
+    Box(modifier.fillMaxWidth().height(10.dp).background(C.surface3)) {
         Canvas(Modifier.fillMaxSize()) {
             val w = if (fraction == null) size.width * 0.32f else (size.width * f.coerceIn(0f, 1f)).coerceAtLeast(size.height)
             val x0 = if (fraction == null) (size.width - w) * (if (reduce) 0f else (0.5f - 0.5f * kotlin.math.cos(sh * 6.2832f))) else 0f
-            val r = size.height / 2
-            drawRoundRect(color, Offset(x0, 0f), Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(r, r))
+            drawRect(color, Offset(x0, 0f), Size(w, size.height))
         }
     }
 }
@@ -295,7 +285,7 @@ fun DrawScope.drawGlyph(kind: Kind, ink: Color) {
 /** Icono del tipo en una baldosa tonal (el color del tipo sobre su propio tinte): identidad de cada archivo. */
 @Composable fun FileTag(e: Entry, size: Dp, modifier: Modifier = Modifier, solid: Boolean = false) {
     val k = e.kind; val c = C.kind(k)
-    Box(modifier.size(size).clip(Squircle(size / 3.4f)).background(if (solid) c else c.copy(alpha = if (Nx.pal.dark) 0.17f else 0.14f)), Alignment.Center) { Glyph(k, size * 0.74f, ink = if (solid) Color.White else c) }
+    Box(modifier.size(size).clip(Squircle(size / 3.4f)).background(if (solid) c else C.surface2).border(1.dp, C.hair, Squircle(size / 3.4f)), Alignment.Center) { Glyph(k, size * 0.74f, ink = if (solid) C.kindInk(k) else C.text) }
 }
 
 // ---------------- Estados vacíos y de error ----------------
@@ -314,7 +304,7 @@ fun DrawScope.drawGlyph(kind: Kind, ink: Color) {
 /** Aviso breve: cápsula flotante con sombra que sube con un muelle. */
 @Composable fun NxToast(msg: String?, modifier: Modifier = Modifier) {
     AnimatedVisibility(msg != null, modifier.padding(bottom = 16.dp, start = 16.dp, end = 16.dp), enter = slideInVertically(spring(0.72f, 450f)) { it } + fadeIn(), exit = slideOutVertically { it / 2 } + fadeOut()) {
-        Box(Modifier.clip(CircleShape).background(C.text).padding(horizontal = 20.dp, vertical = 13.dp)) { Text(msg.orEmpty(), style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = C.bg), maxLines = 2) }
+        Box(Modifier.clip(TkSm).background(C.text).padding(horizontal = 20.dp, vertical = 13.dp)) { Text(msg.orEmpty(), style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = C.bg), maxLines = 2) }
     }
 }
 

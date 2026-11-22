@@ -14,7 +14,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -127,7 +126,7 @@ private fun <T> androidx.compose.foundation.lazy.LazyListScope.itemsIndexed(item
     val segs = listOf(Kind.IMAGE to (d.cats[Kind.IMAGE]?.size ?: 0L), Kind.VIDEO to (d.cats[Kind.VIDEO]?.size ?: 0L), Kind.AUDIO to (d.cats[Kind.AUDIO]?.size ?: 0L), Kind.DOCUMENT to (d.cats[Kind.DOCUMENT]?.size ?: 0L))
     val known = segs.sumOf { it.second }; val used = (d.total - d.free).coerceAtLeast(0)
     val p by animateFloatAsState(if (d.loaded) 1f else 0f, if (reduce) snap() else spring(0.8f, 90f), label = "cap")
-    Row(Modifier.fillMaxWidth().height(16.dp).clip(CircleShape).background(C.surface3), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(Modifier.fillMaxWidth().height(16.dp).background(C.surface3), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         segs.forEach { (k, sz) -> if (sz > 0) Box(Modifier.weight((sz / total * p).coerceAtLeast(0.001f)).fillMaxHeight().background(C.kind(k))) }
         val other = (used - known).coerceAtLeast(0); if (other > 0) Box(Modifier.weight((other / total * p).coerceAtLeast(0.001f)).fillMaxHeight().background(C.faint))
         Spacer(Modifier.weight((d.free / total + (1f - p)).coerceAtLeast(0.001f)))
@@ -135,7 +134,7 @@ private fun <T> androidx.compose.foundation.lazy.LazyListScope.itemsIndexed(item
     Spacer(Modifier.height(10.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         listOf(Kind.IMAGE to "Imágenes", Kind.VIDEO to "Vídeo", Kind.AUDIO to "Audio", Kind.DOCUMENT to "Docs").forEach { (k, l) ->
-            Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).clip(CircleShape).background(C.kind(k))); Spacer(Modifier.width(5.dp)); Text(l, style = TextStyle(fontFamily = Fonts.display, fontSize = 12.sp, color = C.dim)) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(C.kind(k))); Spacer(Modifier.width(5.dp)); Text(l, style = TextStyle(fontFamily = Fonts.display, fontSize = 12.sp, color = C.dim)) }
         }
     }
 }
@@ -171,12 +170,12 @@ private fun <T> androidx.compose.foundation.lazy.LazyListScope.itemsIndexed(item
         Column(Modifier.fillMaxSize()) {
             val (n, u) = sizeParts(s?.size ?: 0)
             Row(verticalAlignment = Alignment.Top) {
-                Box(Modifier.size(if (big) 46.dp else 36.dp).clip(Squircle(if (big) 15.dp else 12.dp)).background(col.copy(alpha = 0.2f)), Alignment.Center) { Glyph(kind, if (big) 33.dp else 26.dp, ink = col) }
+                Box(Modifier.size(if (big) 46.dp else 36.dp).clip(Squircle(if (big) 15.dp else 12.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(if (big) 15.dp else 12.dp)), Alignment.Center) { Glyph(kind, if (big) 33.dp else 26.dp, ink = C.text) }
                 if (!big) { Spacer(Modifier.weight(1f)); Text(if (!loaded) "·" else "${s?.count ?: 0}", style = T.numeral(54), maxLines = 1) }
             }
             Spacer(Modifier.weight(1f))
             if (big) Text(if (!loaded) "·" else "${s?.count ?: 0}", style = T.numeral(96), maxLines = 1)
-            Text(label, style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.SemiBold, fontSize = if (big) 18.sp else 15.sp, color = C.text), maxLines = 1)
+            Text(label, style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.Medium, fontSize = if (big) 18.sp else 15.sp, color = C.text), maxLines = 1)
             if (loaded) Text("$n $u", style = TextStyle(fontFamily = Fonts.display, fontSize = 13.sp, color = C.dim), maxLines = 1)
         }
     }

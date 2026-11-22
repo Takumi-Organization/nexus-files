@@ -148,7 +148,7 @@ fun AnalyzerScreen(vm: AnalyzerViewModel, primaryRoot: File, currentDir: File?, 
                 kinds.forEachIndexed { i, k ->
                     val b = r.bytesByKind[k] ?: 0; val on = k == kind
                     Row(Modifier.fillMaxWidth().enter(i).nxClick({ onKind(if (on) null else k) }).background(if (on) C.surface2 else Color.Transparent).padding(vertical = 9.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(36.dp).clip(Chamfer(8.dp)).background(C.kind(k)), Alignment.Center) { Glyph(k, 28.dp) }
+                        Box(Modifier.size(36.dp).clip(Chamfer(8.dp)).background(C.kind(k)), Alignment.Center) { Glyph(k, 28.dp, ink = C.kindInk(k)) }
                         Spacer(Modifier.width(12.dp))
                         Text(kindLabel(k).uppercase(), style = T.title(26), modifier = Modifier.weight(1f))
                         val (n, u) = sizeParts(b)

@@ -3,7 +3,6 @@ package dev.nexus.files
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,21 +35,6 @@ fun SettingsScreen(vm: ExplorerViewModel, onClose: () -> Unit) {
                 }
                 Group("Apariencia") {
                     NxSegment(ThemeMode.entries.map { it to it.label }, Nx.mode, { Nx.mode = it; persist() })
-                    Spacer(Modifier.height(18.dp))
-                    Text("Color de acento", style = T.label(13)); Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Accent.entries.forEach { a ->
-                            val on = a == Nx.accent
-                            val sc by androidx.compose.animation.core.animateFloatAsState(if (on) 1f else 0.86f, androidx.compose.animation.core.spring(0.5f, 500f), label = "sw")
-                            val h = rememberHaptics()
-                            Box(Modifier.weight(1f).aspectRatio(1f).graphicsLayer { scaleX = sc; scaleY = sc }.clip(CircleShape)
-                                .background(a.color).then(if (on) Modifier.border(3.dp, C.text, CircleShape) else Modifier)
-                                .clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { h.confirm(); Nx.accent = a; persist() }, Alignment.Center) {
-                                if (on) Text("✓", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp, color = a.ink))
-                            }
-                        }
-                    }
-                    Text(Nx.accent.label, style = T.label(13, C.accent), modifier = Modifier.padding(top = 8.dp))
                 }
                 Group("Movimiento") {
                     NxToggle(Nx.animations, { Nx.animations = it; persist() }, "Animaciones", sub = "Se desactivan solas con «Reducir animaciones» del sistema")

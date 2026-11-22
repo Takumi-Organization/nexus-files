@@ -66,7 +66,7 @@ fun sizeParts(b: Long): Pair<String, String> {
             .background(if (selA > 0.5f) c else c.copy(alpha = if (Nx.pal.dark) 0.17f else 0.14f))) {
             Text(if (e.isDir) "" else e.extension.take(4).uppercase(), style = T.label(11, if (selA > 0.5f) Color.White.copy(alpha = 0.85f) else c), modifier = Modifier.padding(12.dp))
             Glyph(k, 66.dp, Modifier.align(Alignment.Center), ink = if (selA > 0.5f) Color.White else c)
-            if (selA > 0f) Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).size(28.dp).graphicsLayer { alpha = selA; scaleX = selA; scaleY = selA }.background(Color.White, androidx.compose.foundation.shape.CircleShape), Alignment.Center) { Text("✓", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = c)) }
+            if (selA > 0f) Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).size(28.dp).graphicsLayer { alpha = selA; scaleX = selA; scaleY = selA }.background(C.accent, TkSm), Alignment.Center) { Text("✓", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = C.onAccent)) }
         }
         Text(e.name, style = T.name(18), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 7.dp, start = 2.dp))
         if (!e.isDir) Text(sizeParts(e.size).let { "${it.first} ${it.second}" }, style = TextStyle(fontFamily = Fonts.display, fontSize = 12.sp, color = C.dim), modifier = Modifier.padding(start = 2.dp, bottom = 4.dp))

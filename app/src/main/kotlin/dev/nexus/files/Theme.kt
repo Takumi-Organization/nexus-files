@@ -24,21 +24,17 @@ enum class ThemeMode(val label: String) { SYSTEM("Auto"), LIGHT("Claro"), DARK("
 class Palette(val bg: Color, val surface: Color, val surface2: Color, val surface3: Color, val text: Color, val dim: Color, val faint: Color, val hair: Color, val danger: Color, val dark: Boolean)
 
 /**
- * Acento (identidad Ryoku Glass, 2026-11-19): cinco, uno activo, con variante oscura y clara (la clara es más oscura para
+ * Takumi no tiene acento: los cinco valores del enum se conservan solo por lo guardado en preferencias y todos
+ * resuelven a la tinta. (Histórico: identidad Ryoku Glass, 2026-11-19): cinco, uno activo, con variante oscura y clara (la clara es más oscura para
  * que el acento como texto o relleno llegue a 4,5:1 sobre el lienzo claro). [ink] es el texto sobre el relleno.
  * Los nombres del enum se conservan por lo guardado en preferencias: BRASA = Bermellón, ULTRAMAR = Egeo,
  * ESMERALDA = Lima, ROSA = Fucsia, AMBAR = Oro. ORQUIDEA se retiró (un valor guardado cae al acento por defecto).
  */
-enum class Accent(val label: String, private val dark: Color, private val onDark: Color, private val light: Color) {
-    BRASA("Bermellón", Color(0xFFFF5A4A), Color(0xFF1B0805), Color(0xFFD12B1F)),
-    ULTRAMAR("Egeo", Color(0xFF62B6E8), Color(0xFF04141D), Color(0xFF0B6B99)),
-    ESMERALDA("Lima", Color(0xFFB6E04A), Color(0xFF121A00), Color(0xFF4F7A00)),
-    ROSA("Fucsia", Color(0xFFFF6FB1), Color(0xFF21040F), Color(0xFFC4166F)),
-    AMBAR("Oro", Color(0xFFF2B33D), Color(0xFF1D1300), Color(0xFF8F5F00));
+enum class Accent(val label: String) {
+    BRASA("Tinta"), ULTRAMAR("Tinta"), ESMERALDA("Tinta"), ROSA("Tinta"), AMBAR("Tinta");
 
-    val color: Color get() = if (Nx.pal.dark) dark else light
-    val ink: Color get() = if (Nx.pal.dark) onDark else Color.White
-    /** Sin degradados en Glass: las variantes «alta» y «armónica» son el propio acento. */
+    val color: Color get() = if (Nx.pal.dark) Color(0xFFF2F2F2) else Color(0xFF0A0A0A)
+    val ink: Color get() = if (Nx.pal.dark) Color.Black else Color(0xFFF4F4F4)
     val hi: Color get() = color
     val second: Color get() = color
 }
@@ -59,9 +55,10 @@ object Nx {
     /** La barra de pestañas se oculta (p. ej. mientras hay una selección y su barra de acciones). */
     var hideNav by mutableStateOf(false)
 
-    private val dark = Palette(Color(0xFF0F1115), Color(0xFF171A20), Color(0xFF232830), Color(0xFF2C323C), Color(0xFFECEFF4), Color(0xFF8E97A6), Color(0xFF5F6877), Color(0x1AECEFF4), Color(0xFFFF7A70), true)
-    private val amoled = Palette(Color(0xFF000000), Color(0xFF0D0F13), Color(0xFF181B21), Color(0xFF232730), Color(0xFFF2F4F8), Color(0xFF8E97A6), Color(0xFF5F6877), Color(0x1AECEFF4), Color(0xFFFF7A70), true)
-    private val light = Palette(Color(0xFFF4F5F7), Color(0xFFFFFFFF), Color(0xFFE9ECF0), Color(0xFFDDE1E7), Color(0xFF14171C), Color(0xFF5F6773), Color(0xFF9AA2AE), Color(0x1C14171C), Color(0xFFB3261E), false)
+    // Takumi (tokens.json): panel/elevado/línea; «surface3» = control (línea) y «hair» = línea de filas.
+    private val dark = Palette(Color(0xFF000000), Color(0xFF080808), Color(0xFF111111), Color(0xFF1C1C1C), Color(0xFFF2F2F2), Color(0xFF8C8C8C), Color(0xFF4A4A4A), Color(0xFF3A3A3A), Color(0xFFF2F2F2), true)
+    private val amoled = dark
+    private val light = Palette(Color(0xFFF4F4F4), Color(0xFFFFFFFF), Color(0xFFEBEBEB), Color(0xFFE0E0E0), Color(0xFF0A0A0A), Color(0xFF6B6B6B), Color(0xFFB0B0B0), Color(0xFFC0C0C0), Color(0xFF0A0A0A), false)
 
     val pal: Palette get() = when (mode) { ThemeMode.LIGHT -> light; ThemeMode.DARK -> dark; ThemeMode.AMOLED -> amoled; ThemeMode.SYSTEM -> if (systemDark) dark else light }
 
@@ -87,26 +84,28 @@ object C {
     val accentBrush: Brush get() = SolidColor(Nx.accent.color)
 
     /** Tipos de archivo: mismo croma y luminosidad en toda la rueda para que convivan; el color significa el tipo. */
-    fun kind(k: Kind) = when (k) {
-        Kind.FOLDER -> Nx.accent.color; Kind.IMAGE -> Color(0xFFFF5C93); Kind.VIDEO -> Color(0xFF9A7CFF)
-        Kind.AUDIO -> Color(0xFF2ED3A3); Kind.DOCUMENT -> Color(0xFF4DA3FF); Kind.ARCHIVE -> Color(0xFFFFB547)
-        Kind.CODE -> Color(0xFF3CD6D0); Kind.OTHER -> Color(0xFF8A93A3)
+    fun kind(k: Kind): Color {
+        val l = when (k) { Kind.FOLDER -> 0xF2; Kind.IMAGE -> 0xD6; Kind.VIDEO -> 0xB8; Kind.AUDIO -> 0x9C; Kind.DOCUMENT -> 0x80; Kind.ARCHIVE -> 0x68; Kind.CODE -> 0x54; Kind.OTHER -> 0x40 }
+        return if (Nx.pal.dark) Color(l, l, l) else Color(0xFF - l + 0x0A, 0xFF - l + 0x0A, 0xFF - l + 0x0A)
     }
-    fun kindInk(k: Kind) = Color(0xFFFFFFFF)
+    /** Texto o icono sobre el relleno de [kind]: contraste máximo según su luminancia. */
+    fun kindInk(k: Kind): Color = if (Nx.pal.dark) (if (k == Kind.CODE || k == Kind.OTHER || k == Kind.ARCHIVE) Color.White else Color.Black) else (if (k == Kind.CODE || k == Kind.OTHER || k == Kind.ARCHIVE) Color.Black else Color.White)
 
-    /** Orígenes: cada protocolo tiene su color propio (y la interfaz se tiñe de él al conectar). */
-    fun origin(p: Protocol?) = when (p) {
-        null -> Color(0xFF8A93A3)
-        Protocol.FTP -> Color(0xFFFFB547); Protocol.FTPS -> Color(0xFF2ED3A3); Protocol.SFTP -> Color(0xFF34D17A)
-        Protocol.SMB -> Color(0xFF4DA3FF); Protocol.WEBDAV -> Color(0xFF9A7CFF); Protocol.SAF -> Color(0xFFFF5C93)
+    /** Orígenes: cada protocolo se distingue por su nombre (la sigla va siempre en texto) y un gris propio. */
+    fun origin(p: Protocol?): Color {
+        val l = when (p) { null -> 0x8C; Protocol.FTP -> 0xB0; Protocol.FTPS -> 0xD0; Protocol.SFTP -> 0xF2; Protocol.SMB -> 0x9A; Protocol.WEBDAV -> 0xC4; Protocol.SAF -> 0xE0 }
+        return if (Nx.pal.dark) Color(l, l, l) else Color(0xFF - l + 0x0A, 0xFF - l + 0x0A, 0xFF - l + 0x0A)
     }
 }
 
-/** Inter (texto y números, SF-like) y JetBrains Mono (rutas, huellas, datos). Ambas OFL, instancias estáticas de las variables. */
+/** Outfit (títulos, texto y números: fina y ancha) y JetBrains Mono (rutas, huellas, datos). Ambas OFL. */
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 object Fonts {
+    private fun outfit(w: Int, key: FontWeight) = Font(R.font.outfit_variable, key, variationSettings = androidx.compose.ui.text.font.FontVariation.Settings(androidx.compose.ui.text.font.FontVariation.weight(w)))
+    /** Pesos de la app → pesos Takumi: lo «Bold» (cifras y títulos) pasa a 200, el cuerpo a 300, lo enfatizado a 500. */
     val display = FontFamily(
-        Font(R.font.inter_regular, FontWeight.Normal), Font(R.font.inter_medium, FontWeight.Medium), Font(R.font.inter_semibold, FontWeight.SemiBold),
-        Font(R.font.inter_bold, FontWeight.Bold), Font(R.font.inter_extrabold, FontWeight.ExtraBold), Font(R.font.inter_extrabold, FontWeight.Black))
+        outfit(300, FontWeight.Normal), outfit(400, FontWeight.Medium), outfit(500, FontWeight.SemiBold),
+        outfit(200, FontWeight.Bold), outfit(200, FontWeight.ExtraBold), outfit(200, FontWeight.Black))
     val mono = FontFamily(Font(R.font.jetbrains_mono_regular, FontWeight.Normal), Font(R.font.jetbrains_mono_semibold, FontWeight.Bold), Font(R.font.jetbrains_mono_semibold, FontWeight.SemiBold))
 }
 
@@ -119,7 +118,7 @@ fun NexusTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = (if (p.dark) darkColorScheme() else lightColorScheme()).copy(
             primary = a.color, onPrimary = a.ink, background = p.bg, surface = p.bg, onSurface = p.text, onBackground = p.text,
-            surfaceVariant = p.surface2, onSurfaceVariant = p.dim, error = p.danger, outline = p.hair, surfaceContainer = p.surface, surfaceContainerHigh = p.surface2,
+            surfaceVariant = p.surface2, onSurfaceVariant = p.dim, error = p.danger, outline = p.hair, surfaceTint = Color.Transparent, surfaceContainer = p.surface, surfaceContainerHigh = p.surface2,
         ),
         content = content,
     )

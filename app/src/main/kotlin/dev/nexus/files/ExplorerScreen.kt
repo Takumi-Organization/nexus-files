@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
@@ -168,7 +167,7 @@ private fun nameError(v: String): String? = (Names.validate(v) as? Names.Result.
         LazyRow(state = st, contentPadding = PaddingValues(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             items(parts.size) { i ->
                 val (label, f) = parts[i]; val last = i == parts.lastIndex
-                Text(label, style = TextStyle(fontFamily = Fonts.display, fontWeight = if (last) FontWeight.SemiBold else FontWeight.Medium, fontSize = 14.sp, color = if (last) C.accent else C.dim), modifier = Modifier.clip(CircleShape).clickable { vm.open(f) }.padding(horizontal = 8.dp, vertical = 10.dp))
+                Text(label, style = TextStyle(fontFamily = Fonts.display, fontWeight = if (last) FontWeight.SemiBold else FontWeight.Medium, fontSize = 14.sp, color = if (last) C.accent else C.dim), modifier = Modifier.clip(TkSm).clickable { vm.open(f) }.padding(horizontal = 8.dp, vertical = 10.dp))
                 if (!last) Text("›", style = TextStyle(fontSize = 16.sp, color = C.faint))
             }
         }
@@ -266,7 +265,7 @@ private fun nameError(v: String): String? = (Names.validate(v) as? Names.Result.
             Row(Modifier.padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(46.dp).clip(Squircle(14.dp)).background(C.surface3.copy(alpha = alpha)))
                 Spacer(Modifier.width(14.dp))
-                Column { Box(Modifier.width((130 + it * 17 % 90).dp).height(14.dp).clip(CircleShape).background(C.surface3.copy(alpha = alpha))); Spacer(Modifier.height(8.dp)); Box(Modifier.width(90.dp).height(10.dp).clip(CircleShape).background(C.surface3.copy(alpha = alpha))) }
+                Column { Box(Modifier.width((130 + it * 17 % 90).dp).height(14.dp).background(C.surface3.copy(alpha = alpha))); Spacer(Modifier.height(8.dp)); Box(Modifier.width(90.dp).height(10.dp).background(C.surface3.copy(alpha = alpha))) }
             }
         }
     }

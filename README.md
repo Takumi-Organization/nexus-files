@@ -4,7 +4,7 @@ Kotlin + Compose. `:core` (Kotlin puro, probado con JUnit: nombres, listado, cop
 
 ## Interfaz y fluidez (rediseño 2026-11-14)
 
-Rediseño completo con dirección visual propia: tipografía **Inter** para texto y **JetBrains Mono** para rutas y
+Rediseño completo con dirección visual propia: tipografía **Outfit** para texto y **JetBrains Mono** para rutas y
 huellas (ambas OFL; licencias en `docs/`), neutros con matiz azul-tinta en lugar de grises puros, seis acentos
 (**Brasa** por defecto), iconografía de trazo dibujada con `Canvas` y un color por tipo de archivo.
 
@@ -125,7 +125,7 @@ verificado en emulador (los atajos `VIEW_PATH`/`OPEN_DIR` existen solo en debug)
 `./gradlew :core:test` · `./gradlew :app:assembleDebug` · permiso: `adb shell appops set dev.nexus.files MANAGE_EXTERNAL_STORAGE allow`
 
 ## Identidad visual: Ryoku Glass (2026-11-19)
-Rediseño sobre la identidad común de Adrián (vault: `Estilo visual Ryoku Glass`): neutros fríos (`#0F1115` / `#171A20` / `#232830`; claro `#F4F5F7`; AMOLED conserva el negro real), filetes de 1 dp, radios 6-20, **sin sombras, degradados ni halos ambientales**, Inter y cinco acentos con variante clara (Bermellón, **Oro por defecto**, Lima, Fucsia, Egeo). Los nombres del enum `Accent` se conservan por las preferencias guardadas (BRASA=Bermellón, ULTRAMAR=Egeo, ESMERALDA=Lima, ROSA=Fucsia, AMBAR=Oro); ORQUIDEA se retiró y un valor guardado cae al acento por defecto.
+Identidad **Takumi** (2026-11-22, sustituye a Ryoku Glass): negro `#000` y tinta `#F2F2F2`, monocromo estricto, esquinas rectas con corte diagonal arriba a la derecha, Outfit + JetBrains Mono, seleccionado por inversión, sin cristal ni desenfoque. Los tipos de archivo y los protocolos se distinguen por icono, texto y un gris propio (no por color). El enum `Accent` se conserva solo por las preferencias guardadas y todos sus valores resuelven a la tinta; el selector de acento ya no existe.
 
 `Squircle` ahora traduce sus radios a la escala Glass en un solo punto (`glassRadius`). El **cristal** (`Glass.kt`, desenfoque real del contenido con `GraphicsLayer` + `BlurEffect`) solo está en la barra de pestañas, que ahora flota sobre el contenido; el resto de superficies son planas con filete. Con API < 31 (minSdk 30) la barra es opaca.
 

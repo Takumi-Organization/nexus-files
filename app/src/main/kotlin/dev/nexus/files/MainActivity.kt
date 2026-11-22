@@ -136,7 +136,7 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
     val ast by analyzer.state.collectAsStateWithLifecycle()
     SideEffect { Nx.ambient = when (tab) { Tab.ANALYZE -> ast.kind?.let { C.kind(it) }; Tab.REMOTE -> rst.active?.let { C.origin(it.protocol) }; else -> null } }
     val blurred = Nx.modals > 0 || settings || viewing != null
-    val blur by androidx.compose.animation.core.animateDpAsState(if (blurred && !reduce) 18.dp else 0.dp, androidx.compose.animation.core.spring(0.9f, 300f), label = "blur")
+    val blur by androidx.compose.animation.core.animateDpAsState(0.dp, androidx.compose.animation.core.spring(0.9f, 300f), label = "blur")
     val dim by androidx.compose.animation.core.animateFloatAsState(if (blurred) 0.9f else 1f, androidx.compose.animation.core.spring(0.9f, 300f), label = "dim")
     Box(Modifier.fillMaxSize().background(C.bg)) {
     Column(Modifier.fillMaxSize().then(if (blur > 0.dp) Modifier.blur(blur) else Modifier).graphicsLayer { scaleX = 0.985f + 0.015f * dim.let { (it - 0.9f) * 10f }; scaleY = scaleX }) {
@@ -184,20 +184,20 @@ private fun Root(onShare: (List<java.io.File>) -> Unit, onOpenExternal: (java.io
 @Composable
 private fun NxNav(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     val h = rememberHaptics()
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    val shape = Squircle(20.dp)
     BoxWithConstraints(Modifier.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth().height(70.dp)
         .glass(shape).padding(5.dp)) {
         val w = maxWidth / labels.size
         val x by androidx.compose.animation.core.animateDpAsState(w * selected, androidx.compose.animation.core.spring(0.72f, 520f), label = "nx")
-        Box(Modifier.offset(x = x).width(w).fillMaxHeight().clip(Squircle(24.dp)).background(C.accent.copy(alpha = 0.16f)))
+        Box(Modifier.offset(x = x).width(w).fillMaxHeight().clip(Squircle(24.dp)).background(C.accent))
         Row(Modifier.fillMaxSize()) {
             labels.forEachIndexed { i, l ->
                 val on = i == selected
-                val col by androidx.compose.animation.animateColorAsState(if (on) C.accent else C.dim, androidx.compose.animation.core.spring(stiffness = 700f), label = "tc")
+                val col by androidx.compose.animation.animateColorAsState(if (on) C.onAccent else C.dim, androidx.compose.animation.core.spring(stiffness = 700f), label = "tc")
                 val lift by androidx.compose.animation.core.animateFloatAsState(if (on) -2f else 0f, androidx.compose.animation.core.spring(0.6f, 600f), label = "lift")
                 Column(Modifier.weight(1f).fillMaxHeight().clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { if (!on) { h.tick(); onSelect(i) } }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     androidx.compose.foundation.Canvas(Modifier.size(26.dp).graphicsLayer { translationY = lift.dp.toPx() }) { drawTabIcon(i, col) }
-                    Text(l, style = androidx.compose.ui.text.TextStyle(fontFamily = Fonts.display, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium, fontSize = 11.sp, color = col), maxLines = 1)
+                    Text(l.uppercase(), style = androidx.compose.ui.text.TextStyle(fontFamily = Fonts.mono, fontSize = 10.sp, letterSpacing = 0.8.sp, color = col), maxLines = 1)
                 }
             }
         }
@@ -224,8 +224,8 @@ private fun LimitedRoot(onBack: () -> Unit) {
     val remote: RemoteViewModel = viewModel()
     BackHandler { if (!remote.up()) onBack() }
     Column(Modifier.fillMaxSize().background(C.bg)) {
-        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).statusBarsPadding().clip(androidx.compose.foundation.shape.CircleShape).background(C.accent.copy(alpha = 0.16f)).padding(horizontal = 14.dp, vertical = 7.dp)) {
-            Text("Modo limitado · solo las carpetas que elijas", style = T.label(12, C.accent))
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).statusBarsPadding().clip(TkSm).border(1.dp, C.hair, TkSm).padding(horizontal = 14.dp, vertical = 7.dp)) {
+            Text("▲ MODO LIMITADO · solo las carpetas que elijas", style = T.label(12, C.text))
         }
         Box(Modifier.weight(1f)) { RemoteScreen(remote) }
     }

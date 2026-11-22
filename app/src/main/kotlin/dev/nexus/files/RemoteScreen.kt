@@ -2,7 +2,6 @@ package dev.nexus.files
 
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
@@ -75,7 +74,7 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
                         item { NxChip("Actualizar", false, { vm.reload() }) }
                         item { NxChip("Salir", false, vm::disconnect) }
                     }
-                    if (insecure(a)) Row(Modifier.padding(horizontal = 24.dp).padding(bottom = 6.dp).clip(CircleShape).background(C.danger.copy(alpha = 0.14f)).padding(horizontal = 12.dp, vertical = 6.dp)) { Text("Sin cifrar: los datos viajan en claro", style = T.label(12, C.danger)) }
+                    if (insecure(a)) Row(Modifier.padding(horizontal = 24.dp).padding(bottom = 6.dp).clip(TkSm).border(1.dp, C.text, TkSm).padding(horizontal = 12.dp, vertical = 6.dp)) { Text("▲ SIN CIFRAR: los datos viajan en claro", style = T.label(12, C.danger)) }
                 }
             }
             if (jobs.isNotEmpty()) TransfersPanel(jobs, tint)
@@ -138,8 +137,8 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
     val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "dot")
     val pulse by t.animateFloat(initialValue = 1f, targetValue = 2.2f, animationSpec = androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(1100), androidx.compose.animation.core.RepeatMode.Restart), label = "p")
     Box(Modifier.size(18.dp), Alignment.Center) {
-        if (!reduce) Box(Modifier.size(8.dp).graphicsLayer { scaleX = pulse; scaleY = pulse; alpha = (2.2f - pulse) / 1.8f * (if (busy) 1f else 0.5f) }.background(color, CircleShape))
-        Box(Modifier.size(8.dp).background(color, CircleShape))
+        if (!reduce) 
+        Box(Modifier.size(8.dp).background(color))
     }
 }
 
@@ -147,7 +146,7 @@ fun RemoteScreen(vm: RemoteViewModel = viewModel()) {
     val c = C.origin(p.protocol)
     Row(Modifier.fillMaxWidth().enter(index).clip(Squircle(26.dp)).background(C.surface).border(1.dp, C.hair, Squircle(26.dp))
         .nxClick(onOpen).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(54.dp).clip(Squircle(17.dp)).background(c.copy(alpha = 0.18f)), Alignment.Center) { Text(if (p.protocol == Protocol.SAF) "SAF" else p.protocol.name.take(4), style = TextStyle(fontFamily = Fonts.mono, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = c)) }
+        Box(Modifier.size(54.dp).clip(Squircle(17.dp)).background(C.surface2).border(1.dp, C.hair, Squircle(17.dp)), Alignment.Center) { Text(if (p.protocol == Protocol.SAF) "SAF" else p.protocol.name.take(4), style = TextStyle(fontFamily = Fonts.mono, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = C.text)) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(p.name, style = T.name(22), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -206,8 +205,8 @@ private fun insecure(p: RemoteProfile) = p.protocol == Protocol.FTP || p.protoco
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 6.dp)) {
             Protocol.entries.forEach { pr ->
                 val on = proto == pr; val col = C.origin(pr)
-                Box(Modifier.heightIn(min = 40.dp).clip(CircleShape).background(if (on) col else col.copy(alpha = 0.14f)).nxClick({ proto = pr }).padding(horizontal = 16.dp), Alignment.Center) {
-                    Text(pr.name, style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = if (on) Color.White else col), maxLines = 1)
+                Box(Modifier.heightIn(min = 40.dp).clip(TkSm).background(if (on) C.accent else Color.Transparent).border(1.dp, if (on) C.accent else C.hair, TkSm).nxClick({ proto = pr }).padding(horizontal = 16.dp), Alignment.Center) {
+                    Text(pr.name, style = TextStyle(fontFamily = Fonts.display, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = if (on) C.onAccent else C.text), maxLines = 1)
                 }
             }
         }

@@ -6,9 +6,9 @@ Explorador de archivos avanzado para Android (Kotlin + Jetpack Compose): navegac
 |---|---|---|---|
 | ![Inicio](docs/capturas/01-inicio.png) | ![Archivos](docs/capturas/02-archivos.png) | ![Selección](docs/capturas/03-seleccion.png) | ![Buscar](docs/capturas/04-buscar.png) |
 
-| Analizador | Remoto | Ajustes |
-|---|---|---|
-| ![Analizador](docs/capturas/05-analizador.png) | ![Remoto](docs/capturas/06-remoto.png) | ![Ajustes](docs/capturas/07-ajustes.png) |
+| Analizador | Remoto | Ajustes | Visor JSON |
+|---|---|---|---|
+| ![Analizador](docs/capturas/05-analizador.png) | ![Remoto](docs/capturas/06-remoto.png) | ![Ajustes](docs/capturas/07-ajustes.png) | ![Visor JSON](docs/capturas/08-visor-json.png) |
 
 Capturas reales (`adb screencap`) de la app release corriendo en un emulador Pixel_API36 (Android 16) con ficheros de demostración sintéticos creados para la ocasión; no contienen datos personales.
 
@@ -82,7 +82,7 @@ Sigue la identidad visual de Takumi-Organization: negro y tinta clara, monocromo
 - SFTP con claves ECDSA, ssh-agent o certificados de usuario, SMB con firmado/cifrado obligatorio o Kerberos, y proveedores SAF distintos del almacenamiento externo, sin verificar.
 - Las categorías del analizador dependen del índice de MediaStore; los temporales se detectan por nombre o extensión.
 - Al mover con cortar/pegar, los favoritos y etiquetas de esa ruta no se reasignan.
-- Defecto visual observado al preparar las capturas (no corregido): el visor interno de JSON muestra los números de línea pero el texto no se ve.
+- Defecto conocido, sin corregir: la categoría «Descargas» de Inicio marca 0 B aunque haya ficheros en la carpeta Download, porque depende del índice de MediaStore.
 
 ## Licencia
 
